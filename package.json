@@ -1,0 +1,37 @@
+{
+  "name": "secure-review",
+  "version": "1.0.0",
+  "description": "CLI-based AI security code review tool for GitLab merge requests",
+  "main": "src/cli.js",
+  "bin": {
+    "secure-review": "./bin/secure-review.js"
+  },
+  "scripts": {
+    "test": "jest",
+    "start": "node bin/secure-review.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TomNguyen132006/secure-review.git"
+  },
+  "keywords": [
+    "security",
+    "cli",
+    "gitlab",
+    "gemini",
+    "code-review"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/TomNguyen132006/secure-review/issues"
+  },
+  "homepage": "https://github.com/TomNguyen132006/secure-review#readme",
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
