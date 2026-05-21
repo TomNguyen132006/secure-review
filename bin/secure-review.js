@@ -1,7 +1,38 @@
 #!/usr/bin/env node
 
-const { createCli } = require("../src/cli");
+const { Command } = require("commander");
 
-const program = createCli();
+function createCli() {
+  const program = new Command();
 
-program.parse(process.argv);
+  program
+    .name("secure-review")
+    .description("AI security code review CLI for GitLab merge requests")
+    .version("1.0.0");
+
+  program
+    .command("scan")
+    .description("Scan a GitLab merge request for security risks")
+    .option("--mr <id>", "GitLab merge request ID")
+    .action((options) => {
+      if (!options.mr) {
+        console.error("Error: Missing required option --mr <id>");
+        process.exitCode = 1;
+        return;
+      }
+
+      console.log(`Scanning merge request ${options.mr}...`);
+      console.log("CLI is working. Security scan will be added in later stories.");
+    });
+
+  return program;
+}
+
+if (require.main === module) {
+  const program = createCli();
+  program.parse(process.argv);
+}
+
+module.exports = {
+  createCli,
+};

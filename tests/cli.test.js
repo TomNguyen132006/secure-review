@@ -1,25 +1,34 @@
-const { createCli } = require("../src/cli");
+const { execSync } = require("child_process");
 
-describe("SecureReview CLI", () => {
-  test("should create CLI with correct name", () => {
-    const program = createCli();
+describe("secure-review CLI", () => {
+  test("should show help", () => {
+    const output = execSync("node bin/secure-review.js --help").toString();
 
-    expect(program.name()).toBe("secure-review");
+    expect(output).toContain("Usage");
+  });
+});
+
+test("should scan merge request when --mr is provided", () => {
+  const output = execSync("node bin/secure-review.js scan --mr 123").toString();
+
+  expect(output).toContain("Scanning merge request 123");
+});
+
+describe("secure-review CLI", () => {
+  test("should show help", () => {
+    const output = execSync("node bin/secure-review.js --help").toString();
+    expect(output).toContain("Usage");
+    expect(output).toContain("scan");
   });
 
-  test("should include scan command", () => {
-    const program = createCli();
-
-    const commandNames = program.commands.map((command) => command.name());
-
-    expect(commandNames).toContain("scan");
+  test("should scan merge request when --mr is provided", () => {
+    const output = execSync("node bin/secure-review.js scan --mr 123").toString();
+    expect(output).toContain("Scanning merge request 123");
   });
 
-  test("should have correct description", () => {
-    const program = createCli();
-
-    expect(program.description()).toBe(
-      "AI security code review CLI for GitLab merge requests"
-    );
+  test("should fail when --mr is missing", () => {
+    expect(() => {
+      execSync("node bin/secure-review.js scan", { stdio: "pipe" });
+    }).toThrow();
   });
 });
