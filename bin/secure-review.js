@@ -11,9 +11,11 @@ const path = require("path");
  * Get local config path for saved GitLab auth token.
  */
 function getConfigPath() {
-  return path.join(os.homedir(), ".secure-review", "config.json");
+  return (
+    process.env.SECURE_REVIEW_CONFIG_PATH ||
+    path.join(os.homedir(), ".secure-review", "config.json")
+  );
 }
-
 /**
  * Task 2.3 — Minh Nguyen
  * Save GitLab token locally after login.
