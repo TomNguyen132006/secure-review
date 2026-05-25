@@ -22,6 +22,7 @@ describe("secure-review CLI", () => {
     fs.rmSync(tempHome, { recursive: true, force: true });
   });
 
+  //task 2.1
   test("should show help", () => {
     const output = execSync("node bin/secure-review.js --help", {
       env: testEnv,
@@ -52,6 +53,9 @@ describe("secure-review CLI", () => {
     expect(output).toContain("Login successful");
   });
 
+  /*
+  test case 2.3
+  */
   test("should store token locally", () => {
     execSync("node bin/secure-review.js login --token glpat_testtoken123", {
       env: testEnv,
@@ -63,6 +67,21 @@ describe("secure-review CLI", () => {
     expect(config.loginTime).toBeDefined();
   });
 
+  /*
+  test case 2.4 / 2.8
+  */
+  test("should fail scan when not logged in", () => {
+      expect(() => {
+        execSync("node bin/secure-review.js scan --mr 123", {
+          stdio: "pipe",
+          env: testEnv,
+        });
+      }).toThrow();
+    });
+
+  /*
+  test 2.5
+  */
   test("should fail when token is missing", () => {
     expect(() => {
       execSync("node bin/secure-review.js login", {
@@ -80,7 +99,32 @@ describe("secure-review CLI", () => {
       });
     }).toThrow();
   });
+  /*
+    test case 2.6
+    */
+    test("should logout successfully", () => {
+      execSync("node bin/secure-review.js login --token glpat_xxxxx", {
+        env: testEnv,
+      });
 
+      const output = execSync("node bin/secure-review.js logout", {
+        env: testEnv,
+      }).toString();
+
+      expect(output).toContain("Logged out successfully");
+    });
+
+  
+ 
+  
+
+  /*
+  test case 2.4
+    Test scan after login.
+    First login to save token.
+  test case 2.8
+    scan should reuse the saved token and scan the merge request.
+  */
   test("should scan merge request when logged in and --mr is provided", () => {
     execSync("node bin/secure-review.js login --token glpat_xxxxx", {
       env: testEnv,
@@ -92,17 +136,11 @@ describe("secure-review CLI", () => {
 
     expect(output).toContain("Using saved GitLab authentication");
     expect(output).toContain("Scanning merge request 123");
-  });
-
-  test("should fail scan when not logged in", () => {
-    expect(() => {
-      execSync("node bin/secure-review.js scan --mr 123", {
-        stdio: "pipe",
-        env: testEnv,
-      });
-    }).toThrow();
-  });
-
+  }); 
+  
+  /* 
+  test 2.8
+  */
   test("should fail when --mr is missing", () => {
     expect(() => {
       execSync("node bin/secure-review.js scan", {
@@ -112,15 +150,4 @@ describe("secure-review CLI", () => {
     }).toThrow();
   });
 
-  test("should logout successfully", () => {
-    execSync("node bin/secure-review.js login --token glpat_xxxxx", {
-      env: testEnv,
-    });
-
-    const output = execSync("node bin/secure-review.js logout", {
-      env: testEnv,
-    }).toString();
-
-    expect(output).toContain("Logged out successfully");
-  });
 });

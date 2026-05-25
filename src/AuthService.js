@@ -9,14 +9,7 @@ class AuthService {
       path.join(os.homedir(), ".secure-review", "config.json");
   }
 
-  getConfigPath() {
-    return this.configPath;
-  }
-
-  isValidGitLabToken(token) {
-    return typeof token === "string" && token.startsWith("glpat_");
-  }
-
+  // Task 2.2 / 2.5
   login(token) {
     if (!token) {
       throw new Error("Missing GitLab token");
@@ -31,6 +24,7 @@ class AuthService {
     return "Login successful";
   }
 
+  // Task 2.3
   saveToken(token) {
     const configDir = path.dirname(this.configPath);
 
@@ -48,6 +42,7 @@ class AuthService {
     );
   }
 
+  // Task 2.4
   readSavedToken() {
     if (!fs.existsSync(this.configPath)) {
       return null;
@@ -61,6 +56,12 @@ class AuthService {
     }
   }
 
+  // Task 2.5
+  isValidGitLabToken(token) {
+      return typeof token === "string" && token.startsWith("glpat_");
+    }
+
+  // Task 2.6
   logout() {
     if (fs.existsSync(this.configPath)) {
       fs.unlinkSync(this.configPath);
@@ -68,6 +69,17 @@ class AuthService {
 
     return "Logged out successfully";
   }
+
+  /*
+  Helper method
+   Return the config file path.
+  */
+  getConfigPath() {
+    return this.configPath;
+  
+  }
 }
+
+  
 
 module.exports = AuthService;
