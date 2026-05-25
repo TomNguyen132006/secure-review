@@ -2,7 +2,12 @@
 
 const { Command } = require("commander");
 const { validateGitLabToken } = require("../services/gitlabService");
-const { disconnectGitLab } = require("../services/gitlabAuthService");
+// const { disconnectGitLab } = require("../services/gitlabAuthService");
+const {
+  disconnectGitLab,
+  isGitLabConnected,
+  getGitLabUsername,
+} = require("../services/gitlabAuthService");
 
 const fs = require("fs");
 const os = require("os");
@@ -131,6 +136,23 @@ function createCli(options = {}) {
 
       console.log(result.message);
     });
+  /**
+   * Task 3.5 — Minh Nguyen
+   * Show whether GitLab account is connected.
+  */
+  gitlabCommand
+    .command("status")
+    .description("Show GitLab connection status")
+    .action(() => {
+      if (!isGitLabConnected()) {
+        console.log("GitLab account is not connected.");
+        return;
+      }
+
+      const username = getGitLabUsername();
+      console.log(`GitLab connected as ${username}.`);
+    });
+
   program
     .command("logout")
     .description("Remove saved GitLab authentication token")
@@ -140,6 +162,8 @@ function createCli(options = {}) {
     });
 
   return program;
+
+  
 }
 
 

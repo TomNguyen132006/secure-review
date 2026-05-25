@@ -76,4 +76,58 @@ describe("Task 3.2 - GitLab Token Validation Service", () => {
       message: "Unable to connect to GitLab.",
     });
   });
+
+  /**
+ * Task 3.7 — Minh Nguyen
+ * Test GitLab token validation service.
+ */
+  describe("GitLab token validation", () => {
+    beforeEach(() => {
+    fetch.mockClear();
+    });
+
+    test("should reject empty token", async () => {
+      const result = await validateGitLabToken("");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("GitLab token cannot be empty.");
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    test("should validate correct GitLab token", async () => {
+      fetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          username: "developer123",
+        }),
+      });
+
+      const result = await validateGitLabToken("valid-token");
+
+      expect(result.success).toBe(true);
+      expect(result.user.username).toBe("developer123");
+    });
+
+    test("should reject invalid GitLab token", async () => {
+      fetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: async () => ({}),
+      });
+
+      const result = await validateGitLabToken("bad-token");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Invalid GitLab token.");
+    });
+
+    test("should handle GitLab API error", async () => {
+      fetch.mockRejectedValue(new Error("Network error"));
+
+      const result = await validateGitLabToken("valid-token");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("Unable to connect to GitLab.");
+    });
+  });
 });

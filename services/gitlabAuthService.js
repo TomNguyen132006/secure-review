@@ -117,5 +117,15 @@ module.exports = {
   getGitLabToken,
   isGitLabConnected,
   disconnectGitLab,
+  getGitLabUsername,
   
 };
+
+/**
+ * Task 3.5 — Minh Nguyen
+ * Return saved GitLab username if connected.
+ */
+function getGitLabUsername() {
+  const config = readConfig();
+  return config.gitlabUsername || null;
+}
