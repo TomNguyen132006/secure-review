@@ -1,41 +1,32 @@
-// Import Node.js file system module
-// fs helps us check, read, write, and delete files during the test
 const fs = require("fs");
-
-// Import Node.js path module
-// path helps us create safe file paths
 const path = require("path");
-
-// Import AuthService from src/AuthService.js
 const AuthService = require("../src/AuthService");
 
 describe("AuthService", () => {
-  // Create a fake config file path for testing only
-  // This prevents the test from touching your real computer config file
   const testConfigPath = path.join(__dirname, "test-config.json");
 
-  // Run before each test
+  // Test setup by beaforeEach() and afterEach()
+
   beforeEach(() => {
     // Tell AuthService to save token into the fake test config file
     process.env.SECURE_REVIEW_CONFIG_PATH = testConfigPath;
 
-    // If old test config exists, delete it before starting
     if (fs.existsSync(testConfigPath)) {
       fs.unlinkSync(testConfigPath);
     }
   });
-
-  // Run after each test
   afterEach(() => {
     // Clean up the fake config file after test
     if (fs.existsSync(testConfigPath)) {
       fs.unlinkSync(testConfigPath);
     }
 
-    // Remove test-only environment variable
     delete process.env.SECURE_REVIEW_CONFIG_PATH;
   });
 
+  /*
+  test case 2.2 
+  */
   test("should process login request with valid token", () => {
     const authService = new AuthService();
 
@@ -44,6 +35,9 @@ describe("AuthService", () => {
     expect(result).toBe("Login successful");
   });
 
+    /*
+  test case 2.3 
+  */
   test("should store token locally", () => {
     const authService = new AuthService();
 
@@ -72,6 +66,9 @@ describe("AuthService", () => {
     expect(fs.existsSync(testConfigPath)).toBe(true);
   });
 
+  /*
+  test case 2.5
+  */
   test("should fail when token is missing", () => {
     const authService = new AuthService();
 
@@ -87,4 +84,7 @@ describe("AuthService", () => {
       authService.login("wrong_token");
     }).toThrow("Invalid GitLab token");
   });
+
+
+
 });
