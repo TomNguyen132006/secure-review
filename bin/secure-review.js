@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 
 const { Command } = require("commander");
+const { validateGitLabToken } = require("../services/gitlabService");
+const { disconnectGitLab } = require("../services/gitlabAuthService");
+
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -17,13 +20,13 @@ function createCli(options = {}) {
     .name("secure-review")
     .description("AI security code review CLI for GitLab merge requests")
     .version("1.0.0");
-    
-    /*
-    Command:
-      node bin/secure-review.js scan --mr 123
-    Purpose:
-      Scan a GitLab merge request.
-    */
+
+  /*
+  Command:
+    node bin/secure-review.js scan --mr 123
+  Purpose:
+    Scan a GitLab merge request.
+  */
   program
     .command("scan")
     .description("Scan a GitLab merge request for security risks")
@@ -34,7 +37,7 @@ function createCli(options = {}) {
         process.exitCode = 1;
         return;
       }
-        const token = readSavedToken();
+      const token = readSavedToken();
       if (!token) {
         console.error("ERROR: Please login first using secure-review login --token <token>");
         process.exitCode = 1;
@@ -47,7 +50,14 @@ function createCli(options = {}) {
       console.log("CLI is working. Security scan will be added in later stories.");
     });
 
-  program
+  /*
+    New command:
+      node bin/secure-review.js gitlab login
+    Purpose:
+      Ask the user to enter a GitLab token.
+      Then send that token to backend validation.
+  */
+ program
     .command("login")
     .description("Save GitLab authentication token locally")
     .requiredOption("--token <token>", "GitLab personal access token")
@@ -62,14 +72,6 @@ function createCli(options = {}) {
       console.log("Login successful");
     });
 
-  /*
-    Story 3 - Task 3.1
-    New command:
-      node bin/secure-review.js gitlab login
-    Purpose:
-      Ask the user to enter a GitLab token.
-      Then send that token to backend validation.
-  */
   const gitlabCommand = program
     .command("gitlab")
     .description("GitLab account commands");
@@ -120,6 +122,15 @@ function createCli(options = {}) {
   Purpose:
     Remove saved GitLab token.
   */
+
+  gitlabCommand
+    .command("logout")
+    .description("Disconnect your GitLab account")
+    .action(() => {
+      const result = disconnectGitLab();
+
+      console.log(result.message);
+    });
   program
     .command("logout")
     .description("Remove saved GitLab authentication token")
@@ -130,8 +141,6 @@ function createCli(options = {}) {
 
   return program;
 }
-
-
 
 
 /*
