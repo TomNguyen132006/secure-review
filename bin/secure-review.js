@@ -20,6 +20,7 @@ function createCli(options = {}) {
   const promptToken = options.promptToken || askQuestion;
   const output = options.console || console;
   const authService = options.authService;
+  const mergeRequestService = options.mergeRequestService;
 
   program
     .name("secure-review")
@@ -30,29 +31,73 @@ function createCli(options = {}) {
   Command:
     node bin/secure-review.js scan --mr 123
   Purpose:
-    Scan a GitLab merge request.
+    Scan a GitLab merge request by ID.
   */
   program
     .command("scan")
     .description("Scan a GitLab merge request for security risks")
     .option("--mr <id>", "GitLab merge request ID")
-    .action((options) => {
-      if (!options.mr) {
-        console.error("Error: Missing required option --mr <id>");
-        process.exitCode = 1;
-        return;
-      }
-      const token = readSavedToken();
-      if (!token) {
-        console.error("ERROR: Please login first using secure-review login --token <token>");
-        process.exitCode = 1;
-        return;
-      }
+    .action(async (commandOptions) => {
+      try {
+        if (!commandOptions.mr) {
+          output.error("Error: Missing required option --mr <id>");
+          process.exitCode = 1;
+          return;
+        }
 
-      console.log("Using saved GitLab authentication");
+        if (authService && authService.isGitLabConnected) {
+          const connected = authService.isGitLabConnected();
 
-      console.log(`Scanning merge request ${options.mr}...`);
-      console.log("CLI is working. Security scan will be added in later stories.");
+          if (!connected) {
+            output.error(
+              "ERROR: Please login first using secure-review login --token <token>"
+            );
+            process.exitCode = 1;
+            return;
+          }
+        }
+
+        let token;
+
+        if (authService && authService.getGitLabToken) {
+          token = authService.getGitLabToken();
+        } else {
+          token = readSavedToken();
+        }
+
+        if (!token) {
+          output.error(
+            "ERROR: Please login first using secure-review login --token <token>"
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        if (mergeRequestService) {
+          const result = await mergeRequestService.scanMergeRequest(
+            commandOptions.mr,
+            token
+          );
+
+          if (!result.success) {
+            output.error(result.message);
+            process.exitCode = 1;
+            return;
+          }
+
+          output.log(result.message);
+          process.exitCode = 0;
+          return;
+        }
+
+        output.log("Using saved GitLab authentication");
+        output.log(`Scanning merge request ${commandOptions.mr}...`);
+        output.log("CLI is working. Security scan will be added in later stories.");
+        process.exitCode = 0;
+      } catch (error) {
+        output.error(`ERROR: ${error.message}`);
+        process.exitCode = 1;
+      }
     });
 
   /*
@@ -62,7 +107,7 @@ function createCli(options = {}) {
       Ask the user to enter a GitLab token.
       Then send that token to backend validation.
   */
- program
+  program
     .command("login")
     .description("Save GitLab authentication token locally")
     .requiredOption("--token <token>", "GitLab personal access token")
@@ -163,7 +208,7 @@ function createCli(options = {}) {
 
   return program;
 
-  
+
 }
 
 
