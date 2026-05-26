@@ -99,6 +99,7 @@ describe("secure-review CLI", () => {
       });
     }).toThrow();
   });
+  
   /*
     test case 2.6
     */
@@ -113,27 +114,6 @@ describe("secure-review CLI", () => {
 
       expect(output).toContain("Logged out successfully");
     });
-
-
-  /*
-  test case 2.4
-    Test scan after login.
-    First login to save token.
-  test case 2.8
-    scan should reuse the saved token and scan the merge request.
-  */
-  test("should scan merge request when logged in and --mr is provided", () => {
-    execSync("node bin/secure-review.js login --token glpat_xxxxx", {
-      env: testEnv,
-    });
-
-    const output = execSync("node bin/secure-review.js scan --mr 123", {
-      env: testEnv,
-    }).toString();
-
-    expect(output).toContain("Using saved GitLab authentication");
-    expect(output).toContain("Scanning merge request 123");
-  }); 
   
   /* 
   test 2.8

@@ -20,10 +20,26 @@ async function fetchMergeRequestDiff(projectId, mrId, token) {
       },
     });
 
+    // Handle invalid MR, unauthorized private repo, and GitLab API errors.
+    if (response.status === 401 || response.status === 403) {
+        return {
+            success: false,
+            message: "Error: Invalid or expired GitLab token.",
+            status: response.status,
+        };
+        }
+
+        if (response.status === 404) {
+        return {
+            success: false,
+            message: "Error: Merge request not found.",
+            status: response.status,
+        };
+    }
     if (!response.ok) {
       return {
         success: false,
-        message: "Failed to fetch merge request diff.",
+        message: "Error: Unable to fetch merge request diff.",
         status: response.status,
       };
     }
@@ -50,7 +66,7 @@ async function fetchMergeRequestDiff(projectId, mrId, token) {
   } catch (error) {
     return {
       success: false,
-      message: "Unable to connect to GitLab.",
+      message: "Error: Unable to fetch merge request diff.",
       error: error.message,
     };
   }
