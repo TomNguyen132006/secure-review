@@ -114,9 +114,6 @@ describe("secure-review CLI", () => {
       expect(output).toContain("Logged out successfully");
     });
 
-  
- 
-  
 
   /*
   test case 2.4
@@ -148,6 +145,30 @@ describe("secure-review CLI", () => {
         env: testEnv,
       });
     }).toThrow();
+  });
+
+  /**
+   * Task 3.8 — Minh Nguyen
+   * Test GitLab status when account is not connected.
+   */
+  test("should show GitLab not connected status", () => {
+    const output = execSync("node bin/secure-review.js gitlab status", {
+      env: testEnv,
+    }).toString();
+
+    expect(output).toContain("GitLab account is not connected.");
+  });
+
+  /**
+   * Task 3.8 — Minh Nguyen
+   * Test GitLab disconnect command does not crash.
+   */
+  test("should disconnect GitLab account", () => {
+    const output = execSync("node bin/secure-review.js gitlab logout", {
+      env: testEnv,
+    }).toString();
+
+    expect(output).toContain("GitLab account disconnected successfully.");
   });
 
 });
