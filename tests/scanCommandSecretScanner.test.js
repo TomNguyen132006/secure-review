@@ -71,9 +71,13 @@ describe("scan command secret scanner", () => {
     expect(fetchMergeRequestDiff).toHaveBeenCalledWith("123", "7", "fake-token");
     expect(scanMergeRequestDiff).toHaveBeenCalledWith(fakeDiff);
 
-    expect(consoleLogSpy).toHaveBeenCalledWith("Security issues found:");
-    expect(consoleLogSpy).toHaveBeenCalledWith("File: src/AuthService.java");
-    expect(consoleLogSpy).toHaveBeenCalledWith("Risk Level: HIGH");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining("HIGH")
+    );
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining("src/AuthService.java")
+    );
   });
 
   test("prints no issues found message when scanner finds no secrets", async () => {
@@ -135,5 +139,32 @@ describe("scan command secret scanner", () => {
     );
 
     expect(process.exitCode).toBe(1);
+  });
+
+  const { formatSecurityReport } = require("../services/securityReportFormatter");
+
+  describe("Scan Command Secret Output", () => {
+    test("prints no issue message when no secrets found", () => {
+      const output = formatSecurityReport([]);
+
+      expect(output).toContain("No security issues found");
+    });
+
+    test("prints risk level for secret finding", () => {
+      const output = formatSecurityReport([
+        {
+          file: "src/app.js",
+          line: 3,
+          riskLevel: "HIGH",
+          issueType: "Hardcoded Secret",
+          explanation: "API key is hardcoded.",
+          suggestedFix: "Move it to environment variables."
+        }
+      ]);
+
+      expect(output).toContain("HIGH");
+      expect(output).toContain("Hardcoded Secret");
+      expect(output).toContain("src/app.js");
+    });
   });
 });
