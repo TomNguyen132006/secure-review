@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 
 const { Command } = require("commander");
-const { validateGitLabToken } = require("../services/gitlabService");
-const { fetchMergeRequestDiff } = require("../services/gitlabMergeRequestService");
+
 const {
-  disconnectGitLab,
+  saveGitLabToken,
+  getGitLabToken,
   isGitLabConnected,
+  disconnectGitLab,
   getGitLabUsername,
 } = require("../services/gitlabAuthService");
+
+const { fetchMergeRequestDiff } = require("../services/gitlabMergeRequestService");
+const { scanMergeRequestDiff } = require("../security/secretScanner");
 
 const fs = require("fs");
 const os = require("os");
@@ -19,7 +23,14 @@ function createCli(options = {}) {
 
   const promptToken = options.promptToken || askQuestion;
   const output = options.console || console;
-  const authService = options.authService;
+  const authService =
+    options.authService || {
+      saveGitLabToken,
+      getGitLabToken,
+      isGitLabConnected,
+      disconnectGitLab,
+      getGitLabUsername,
+    };
   const mergeRequestService = options.mergeRequestService;
 
   program
@@ -29,7 +40,7 @@ function createCli(options = {}) {
 
   /*
   Command:
-    node bin/secure-review.js scan --mr 123
+    node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123
   Purpose:
     Scan a GitLab merge request by ID.
   */
@@ -80,7 +91,7 @@ function createCli(options = {}) {
             token
           );
 
-          if (!result.success) {
+          if (result.success === false) {
             output.error(result.message);
             process.exitCode = 1;
             return;
@@ -91,8 +102,11 @@ function createCli(options = {}) {
           return;
         }
 
-        // Real CLI scan fallback: fetch MR diff using saved token.
-        const projectId = commandOptions.project || "TomNguyen132006/secure-review";
+        const projectId =
+          commandOptions.project || "TomNguyen132006/secure-review";
+
+        output.log("Using saved GitLab authentication");
+        output.log(`Scanning merge request ${commandOptions.mr}...`);
 
         const result = await fetchMergeRequestDiff(
           projectId,
@@ -100,23 +114,48 @@ function createCli(options = {}) {
           token
         );
 
-        if (!result.success) {
+        if (result.success === false) {
           output.error(result.message);
           process.exitCode = 1;
           return;
         }
 
-        output.log("Using saved GitLab authentication");
-        output.log(`Scanning merge request ${commandOptions.mr}...`);
         output.log(`Changed files found: ${result.changes.length}`);
 
         result.changes.forEach((change, index) => {
           output.log(`${index + 1}. ${change.new_path || change.old_path}`);
         });
 
+        const secretScanResult = scanMergeRequestDiff(result);
+
+        if (!secretScanResult.success) {
+          output.error("Secret scan failed.");
+          process.exitCode = 1;
+          return;
+        }
+
+        if (secretScanResult.issues.length === 0) {
+          output.log("No security issues found.");
+          process.exitCode = 0;
+          return;
+        }
+
+        output.log("Security issues found:");
+
+        secretScanResult.issues.forEach((issue, index) => {
+          output.log("");
+          output.log(`Issue ${index + 1}:`);
+          output.log(`File: ${issue.file}`);
+          output.log(`Line: ${issue.line}`);
+          output.log(`Type: ${issue.issueType}`);
+          output.log(`Risk Level: ${issue.riskLevel}`);
+          output.log(`Explanation: ${issue.explanation}`);
+          output.log(`Suggested Fix: ${issue.suggestedFix}`);
+        });
+
         process.exitCode = 0;
-        
       } catch (error) {
+        output.error("Scan failed:", error.message);
         output.error(`ERROR: ${error.message}`);
         process.exitCode = 1;
       }
@@ -178,7 +217,7 @@ function createCli(options = {}) {
         "GitLab account connected successfully."
       );
 
-      if (!result.success) {
+      if (result.success === false) {
         output.error(result.message);
         process.exitCode = 1;
         return;
