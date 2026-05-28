@@ -15,43 +15,43 @@
 const secretPatterns = [
   {
     type: "API Key",
+    issueType: "Hardcoded API Key",
     riskLevel: "HIGH",
     regex: /api[_-]?key\s*=\s*["'][^"']+["']/i,
-    explanation: "An API key appears to be hardcoded in the source code.",
-    suggestedFix:
-      "Move the API key to an environment variable or a secure secret manager.",
+    explanation: "API key is stored directly in source code.",
+    suggestedFix: "Move the secret to environment variables or Google Secret Manager.",
   },
   {
     type: "Hardcoded Password",
+    issueType: "Hardcoded Password",
     riskLevel: "HIGH",
     regex: /password\s*=\s*["'][^"']+["']/i,
-    explanation: "A password appears to be hardcoded in the source code.",
-    suggestedFix:
-      "Move the password to an environment variable and rotate the exposed password.",
+    explanation: "Password is stored directly in source code.",
+    suggestedFix: "Move the password to environment variables or Google Secret Manager.",
   },
   {
     type: "Access Token",
+    issueType: "Hardcoded Token",
     riskLevel: "HIGH",
     regex: /token\s*=\s*["'][^"']+["']/i,
-    explanation: "An access token appears to be hardcoded in the source code.",
-    suggestedFix:
-      "Store the token in an environment variable or a secure secret manager.",
+    explanation: "Access token is stored directly in source code.",
+    suggestedFix: "Move the token to environment variables or Google Secret Manager.",
   },
   {
     type: "AWS Access Key",
+    issueType: "AWS Access Key",
     riskLevel: "CRITICAL",
     regex: /AKIA[0-9A-Z]{16}/,
-    explanation: "An AWS access key appears to be hardcoded in the source code.",
-    suggestedFix:
-      "Remove the AWS key from the code, rotate it in AWS IAM, and store the new key securely.",
+    explanation: "AWS access key appears to be hardcoded in source code.",
+    suggestedFix: "Remove the key and rotate it immediately in AWS IAM.",
   },
   {
     type: "Private Key",
+    issueType: "Private Key",
     riskLevel: "CRITICAL",
     regex: /-----BEGIN PRIVATE KEY-----/,
-    explanation: "A private key appears to be included in the source code.",
-    suggestedFix:
-      "Remove the private key from the repository and store it in a secure secret manager.",
+    explanation: "Private key is stored directly in source code.",
+    suggestedFix: "Remove the private key and store it securely outside the repository.",
   },
 ];
 
