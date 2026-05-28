@@ -141,7 +141,7 @@ describe("fetchMergeRequestDiff", () => {
     const result = await fetchMergeRequestDiff("123", "999", "fake-token");
 
     expect(result.success).toBe(false);
-    expect(result.message).toBe("Failed to fetch merge request diff.");
+    expect(result.message).toBe("Error: Merge request not found.");
     expect(result.status).toBe(404);
   });
 
@@ -154,4 +154,71 @@ describe("fetchMergeRequestDiff", () => {
     );
     expect(fetch).not.toHaveBeenCalled();
   });
+
+    /**
+     * Story 4 | Task 4.4 — Minh Nguyen
+     * Test 404 invalid merge request response.
+     */
+    test("should return clear error when merge request is not found", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 404,
+            json: async () => ({}),
+        });
+
+        const result = await fetchMergeRequestDiff("123", "999", "fake-token");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Error: Merge request not found.");
+        expect(result.status).toBe(404);
+    });
+
+    /**
+     * Story 4 | Task 4.5 — Minh Nguyen
+     * Test private repo unauthorized or expired token response.
+     */
+    test("should return clear error when token is invalid or expired", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+            json: async () => ({}),
+        });
+
+        const result = await fetchMergeRequestDiff("123", "5", "bad-token");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Error: Invalid or expired GitLab token.");
+        expect(result.status).toBe(401);
+    });
+
+    /**
+     * Story 4 | Task 4.4 — Minh Nguyen
+     * Test GitLab server failure.
+     */
+    test("should return clear error when GitLab API fails", async () => {
+        fetch.mockResolvedValueOnce({
+            ok: false,
+            status: 500,
+            json: async () => ({}),
+        });
+
+        const result = await fetchMergeRequestDiff("123", "5", "fake-token");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Error: Unable to fetch merge request diff.");
+        expect(result.status).toBe(500);
+    });
+
+    /**
+     * Story 4 | Task 4.4 — Minh Nguyen
+     * Test network failure.
+     */
+    test("should return clear error when network request fails", async () => {
+        fetch.mockRejectedValueOnce(new Error("Network failure"));
+
+        const result = await fetchMergeRequestDiff("123", "5", "fake-token");
+
+        expect(result.success).toBe(false);
+        expect(result.message).toBe("Error: Unable to fetch merge request diff.");
+    });
 });

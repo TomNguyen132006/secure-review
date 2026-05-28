@@ -2,7 +2,7 @@
 
 const { Command } = require("commander");
 const { validateGitLabToken } = require("../services/gitlabService");
-// const { disconnectGitLab } = require("../services/gitlabAuthService");
+const { fetchMergeRequestDiff } = require("../services/gitlabMergeRequestService");
 const {
   disconnectGitLab,
   isGitLabConnected,
@@ -37,6 +37,7 @@ function createCli(options = {}) {
     .command("scan")
     .description("Scan a GitLab merge request for security risks")
     .option("--mr <id>", "GitLab merge request ID")
+    .option("--project <id>", "GitLab project ID or path")
     .action(async (commandOptions) => {
       try {
         if (!commandOptions.mr) {
@@ -90,10 +91,31 @@ function createCli(options = {}) {
           return;
         }
 
+        // Real CLI scan fallback: fetch MR diff using saved token.
+        const projectId = commandOptions.project || "TomNguyen132006/secure-review";
+
+        const result = await fetchMergeRequestDiff(
+          projectId,
+          commandOptions.mr,
+          token
+        );
+
+        if (!result.success) {
+          output.error(result.message);
+          process.exitCode = 1;
+          return;
+        }
+
         output.log("Using saved GitLab authentication");
         output.log(`Scanning merge request ${commandOptions.mr}...`);
-        output.log("CLI is working. Security scan will be added in later stories.");
+        output.log(`Changed files found: ${result.changes.length}`);
+
+        result.changes.forEach((change, index) => {
+          output.log(`${index + 1}. ${change.new_path || change.old_path}`);
+        });
+
         process.exitCode = 0;
+        
       } catch (error) {
         output.error(`ERROR: ${error.message}`);
         process.exitCode = 1;
