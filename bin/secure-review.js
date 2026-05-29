@@ -18,6 +18,8 @@ const os = require("os");
 const path = require("path");
 const readline = require("readline");
 
+const { formatSecurityReport } = require("../services/securityReportFormatter");
+
 function createCli(options = {}) {
   const program = new Command();
 
@@ -140,18 +142,20 @@ function createCli(options = {}) {
           return;
         }
 
-        output.log("Security issues found:");
+        // output.log("Security issues found:");
 
-        secretScanResult.issues.forEach((issue, index) => {
-          output.log("");
-          output.log(`Issue ${index + 1}:`);
-          output.log(`File: ${issue.file}`);
-          output.log(`Line: ${issue.line}`);
-          output.log(`Type: ${issue.issueType}`);
-          output.log(`Risk Level: ${issue.riskLevel}`);
-          output.log(`Explanation: ${issue.explanation}`);
-          output.log(`Suggested Fix: ${issue.suggestedFix}`);
-        });
+        // secretScanResult.issues.forEach((issue, index) => {
+        //   output.log("");
+        //   output.log(`Issue ${index + 1}:`);
+        //   output.log(`File: ${issue.file}`);
+        //   output.log(`Line: ${issue.line}`);
+        //   output.log(`Type: ${issue.issueType}`);
+        //   output.log(`Risk Level: ${issue.riskLevel}`);
+        //   output.log(`Explanation: ${issue.explanation}`);
+        //   output.log(`Suggested Fix: ${issue.suggestedFix}`);
+        // });
+        const report = formatSecurityReport(secretScanResult.issues);
+        output.log(report);
 
         process.exitCode = 0;
       } catch (error) {
