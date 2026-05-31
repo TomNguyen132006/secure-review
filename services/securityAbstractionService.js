@@ -1,5 +1,6 @@
 /**
  * Task 6.4 : Convert a raw security finding into a safe abstract description.
+ * Task 7.2 : Add safe abstraction for weak authentication.
  */
 
 function createAbstractDescription(finding = {}) {
@@ -29,6 +30,10 @@ function createAbstractDescription(finding = {}) {
 
 function getSafePatternDescription(issueType = "") {
   const normalizedIssueType = issueType.toLowerCase();
+
+  if (normalizedIssueType.includes("weak authentication")) {
+    return "Authentication logic compares a password variable directly against a hardcoded weak or default password value.";
+  }
 
   if (normalizedIssueType.includes("api key")) {
     return "Variable assignment of string literal to credential-named identifier.";
