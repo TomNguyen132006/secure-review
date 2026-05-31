@@ -186,4 +186,100 @@ describe("securityReportService", () => {
     expect(report).toContain("Suggested Fix:");
     expect(report).toContain("Use secure authentication logic.");
   });
+    test("includes missing validation findings in the final report", () => {
+    const results = [
+      {
+        issueType: "Missing Validation",
+        riskLevel: "Medium",
+        fileName: "UserController.java",
+        lineNumber: 8,
+        explanation: "Endpoint accepts user input without validation.",
+        suggestedFix:
+          "Use @Valid or @Validated with request body objects and define validation rules on the model.",
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Security Scan Report");
+    expect(report).toContain("Missing Validation");
+    expect(report).toContain("Medium");
+    expect(report).toContain("UserController.java");
+    expect(report).toContain("8");
+    expect(report).toContain("Endpoint accepts user input without validation.");
+    expect(report).toContain(
+      "Use @Valid or @Validated with request body objects and define validation rules on the model."
+    );
+    expect(report).toContain("local");
+  });
+
+  test("report still works when only local missing validation finding exists", () => {
+    const results = [
+      {
+        issueType: "Missing Validation",
+        riskLevel: "Medium",
+        fileName: "UserController.java",
+        lineNumber: 8,
+        explanation: "Endpoint accepts user input without validation.",
+        suggestedFix:
+          "Use @Valid or @Validated with request body objects and define validation rules on the model.",
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Total Findings   : 1");
+    expect(report).toContain("Missing Validation");
+    expect(report).toContain("UserController.java");
+    expect(report).toContain("Endpoint accepts user input without validation.");
+  });
+
+  test("report does not break when Gemini is unavailable and local missing validation finding is returned", () => {
+    const results = [
+      {
+        issueType: "Missing Validation",
+        riskLevel: "Medium",
+        fileName: "UserController.java",
+        lineNumber: 8,
+        explanation: "Endpoint accepts user input without validation.",
+        suggestedFix:
+          "Use @Valid or @Validated with request body objects and define validation rules on the model.",
+        source: "local-fallback",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Missing Validation");
+    expect(report).toContain("UserController.java");
+    expect(report).toContain("local-fallback");
+  });
+
+  test("missing validation report includes required fields even when some values are missing", () => {
+    const results = [
+      {
+        issueType: "Missing Validation",
+        riskLevel: "Medium",
+        explanation: "Endpoint accepts user input without validation.",
+        suggestedFix:
+          "Use @Valid or @Validated with request body objects and define validation rules on the model.",
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Issue Type : Missing Validation");
+    expect(report).toContain("Risk Level : Medium");
+    expect(report).toContain("File       : Not provided");
+    expect(report).toContain("Line       : Not provided");
+    expect(report).toContain("Explanation:");
+    expect(report).toContain("Endpoint accepts user input without validation.");
+    expect(report).toContain("Suggested Fix:");
+    expect(report).toContain(
+      "Use @Valid or @Validated with request body objects and define validation rules on the model."
+    );
+  });
 });
