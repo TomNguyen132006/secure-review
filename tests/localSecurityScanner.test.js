@@ -237,7 +237,7 @@ diff --git a/src/auth.js b/src/auth.js
       );
     });
   });
-    test("should detect weak hardcoded password comparison", () => {
+  test("should detect weak hardcoded password comparison", () => {
     const diff = `
       const password = "admin123";
     `;
@@ -372,4 +372,145 @@ diff --git a/src/auth.js b/src/auth.js
 
     expect(findings).toEqual([]);
   });
+  /*
+Test case for story 8:
+*/
+  describe("Local Security Scanner - Missing Validation", () => {
+    test("should detect missing validation in a PostMapping method", () => {
+      const codeDiff = `
+diff --git a/src/UserController.java b/src/UserController.java
++++ b/src/UserController.java
+@@
++ @PostMapping
++ public void createUser(User user) {
++ }
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Validation",
+            riskLevel: "Medium",
+            fileName: "src/UserController.java",
+            lineNumber: expect.any(Number),
+          }),
+        ])
+      );
+    });
+
+    test("should detect missing validation in a PutMapping method", () => {
+      const codeDiff = `
+diff --git a/src/UserController.java b/src/UserController.java
++++ b/src/UserController.java
+@@
++ @PutMapping
++ public void updateUser(@RequestBody User user) {
++ }
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Validation",
+            riskLevel: "Medium",
+          }),
+        ])
+      );
+    });
+
+    test("should detect missing validation in a PatchMapping method", () => {
+      const codeDiff = `
+diff --git a/src/UserController.java b/src/UserController.java
++++ b/src/UserController.java
+@@
++ @PatchMapping
++ public void updateUser(User user) {
++ }
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Validation",
+            riskLevel: "Medium",
+          }),
+        ])
+      );
+    });
+
+    test("should not flag code that uses Valid", () => {
+      const codeDiff = `
+diff --git a/src/UserController.java b/src/UserController.java
++++ b/src/UserController.java
+@@
++ @PostMapping
++ public void createUser(@Valid @RequestBody User user) {
++ }
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(
+        findings.some((finding) => finding.issueType === "Missing Validation")
+      ).toBe(false);
+    });
+
+    test("should not flag code that uses Validated", () => {
+      const codeDiff = `
+diff --git a/src/UserController.java b/src/UserController.java
++++ b/src/UserController.java
+@@
++ @PostMapping
++ public void createUser(@Validated @RequestBody User user) {
++ }
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(
+        findings.some((finding) => finding.issueType === "Missing Validation")
+      ).toBe(false);
+    });
+
+    test("should handle empty input safely for missing validation", () => {
+      const findings = scanSecurityPatterns("");
+
+      expect(findings).toEqual([]);
+    });
+
+    test("missing validation finding should include required fields", () => {
+      const codeDiff = `
+diff --git a/src/UserController.java b/src/UserController.java
++++ b/src/UserController.java
+@@
++ @PostMapping
++ public void createUser(User user) {
++ }
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      const missingValidationFinding = findings.find(
+        (finding) => finding.issueType === "Missing Validation"
+      );
+
+      expect(missingValidationFinding).toBeDefined();
+      expect(missingValidationFinding).toHaveProperty("issueType");
+      expect(missingValidationFinding).toHaveProperty("riskLevel");
+      expect(missingValidationFinding).toHaveProperty("fileName");
+      expect(missingValidationFinding).toHaveProperty("lineNumber");
+      expect(missingValidationFinding).toHaveProperty("explanation");
+      expect(missingValidationFinding).toHaveProperty("suggestedFix");
+
+      expect(missingValidationFinding.issueType).toBe("Missing Validation");
+      expect(missingValidationFinding.riskLevel).toBe("Medium");
+    });
+  });
+  
 });

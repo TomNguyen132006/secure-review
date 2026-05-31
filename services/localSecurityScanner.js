@@ -178,6 +178,16 @@ function scanSecurityPatterns(codeDiff) {
       return;
     }
 
+    const missingValidationFinding = detectMissingValidation(
+      lines,
+      currentFileName,
+      index
+    );
+
+    if (missingValidationFinding) {
+      findings.push(missingValidationFinding);
+    }
+
     securityPatterns.forEach((pattern) => {
       if (pattern.regex.test(line)) {
         findings.push(
@@ -195,6 +205,45 @@ function scanSecurityPatterns(codeDiff) {
   });
 
   return findings;
+}
+
+function detectMissingValidation(lines, currentFileName, startIndex) {
+  const currentLine = lines[startIndex];
+
+  const hasMappingAnnotation =
+    currentLine.includes("@PostMapping") ||
+    currentLine.includes("@PutMapping") ||
+    currentLine.includes("@PatchMapping");
+
+  if (!hasMappingAnnotation) {
+    return null;
+  }
+
+  const nearbyCode = lines.slice(startIndex, startIndex + 5).join(" ");
+
+  const hasMethodSignature =
+    nearbyCode.includes("public ") ||
+    nearbyCode.includes("private ") ||
+    nearbyCode.includes("protected ");
+
+  const hasMethodParameter = /\([^)]*\)/.test(nearbyCode);
+
+  const hasValidation =
+    nearbyCode.includes("@Valid") || nearbyCode.includes("@Validated");
+
+  if (hasMethodSignature && hasMethodParameter && !hasValidation) {
+    return createFinding({
+      issueType: "Missing Validation",
+      riskLevel: "Medium",
+      explanation: "Endpoint accepts user input without validation.",
+      suggestedFix:
+        "Use @Valid or @Validated with request body objects and define validation rules on the model.",
+      fileName: currentFileName,
+      lineNumber: startIndex + 1,
+    });
+  }
+
+  return null;
 }
 
 module.exports = {
