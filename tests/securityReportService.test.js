@@ -97,4 +97,93 @@ describe("securityReportService", () => {
 
     expect(report).toContain("HIGH RISK");
   });
+    test("includes weak authentication findings in the final report", () => {
+    const results = [
+      {
+        issueType: "Weak Authentication",
+        riskLevel: "High",
+        fileName: "login.js",
+        lineNumber: 12,
+        explanation: "Authentication logic uses a hardcoded weak password.",
+        suggestedFix: "Use secure password hashing and never hardcode passwords.",
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Security Scan Report");
+    expect(report).toContain("Weak Authentication");
+    expect(report).toContain("High");
+    expect(report).toContain("login.js");
+    expect(report).toContain("12");
+    expect(report).toContain("Authentication logic uses a hardcoded weak password.");
+    expect(report).toContain("Use secure password hashing and never hardcode passwords.");
+    expect(report).toContain("local");
+  });
+
+  test("report still works when only local weak authentication finding exists", () => {
+    const results = [
+      {
+        issueType: "Weak Authentication",
+        riskLevel: "High",
+        fileName: "auth.js",
+        lineNumber: 5,
+        explanation: "Password is compared directly against a weak default value.",
+        suggestedFix: "Use hashed passwords and secure authentication checks.",
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Total Findings   : 1");
+    expect(report).toContain("High-Risk Issues : 1");
+    expect(report).toContain("Weak Authentication");
+    expect(report).toContain("auth.js");
+  });
+
+  test("report does not break when Gemini is unavailable and local weak authentication finding is returned", () => {
+    const results = [
+      {
+        issueType: "Weak Authentication",
+        riskLevel: "High",
+        fileName: "adminLogin.js",
+        lineNumber: 8,
+        explanation: "Hardcoded admin credential logic was detected.",
+        suggestedFix: "Remove hardcoded admin credentials and use secure user management.",
+        source: "local-fallback",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Weak Authentication");
+    expect(report).toContain("adminLogin.js");
+    expect(report).toContain("Hardcoded admin credential logic was detected.");
+    expect(report).toContain("local-fallback");
+  });
+
+  test("weak authentication report includes required fields even when some values are missing", () => {
+    const results = [
+      {
+        issueType: "Weak Authentication",
+        riskLevel: "High",
+        explanation: "Weak authentication logic was detected.",
+        suggestedFix: "Use secure authentication logic.",
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(results);
+
+    expect(report).toContain("Issue Type : Weak Authentication");
+    expect(report).toContain("Risk Level : High");
+    expect(report).toContain("File       : Not provided");
+    expect(report).toContain("Line       : Not provided");
+    expect(report).toContain("Explanation:");
+    expect(report).toContain("Weak authentication logic was detected.");
+    expect(report).toContain("Suggested Fix:");
+    expect(report).toContain("Use secure authentication logic.");
+  });
 });
