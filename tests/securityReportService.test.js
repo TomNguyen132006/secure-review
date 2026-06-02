@@ -97,7 +97,7 @@ describe("securityReportService", () => {
 
     expect(report).toContain("HIGH RISK");
   });
-    test("includes weak authentication findings in the final report", () => {
+  test("includes weak authentication findings in the final report", () => {
     const results = [
       {
         issueType: "Weak Authentication",
@@ -186,7 +186,7 @@ describe("securityReportService", () => {
     expect(report).toContain("Suggested Fix:");
     expect(report).toContain("Use secure authentication logic.");
   });
-    test("includes missing validation findings in the final report", () => {
+  test("includes missing validation findings in the final report", () => {
     const results = [
       {
         issueType: "Missing Validation",
@@ -280,6 +280,47 @@ describe("securityReportService", () => {
     expect(report).toContain("Suggested Fix:");
     expect(report).toContain(
       "Use @Valid or @Validated with request body objects and define validation rules on the model."
+    );
+  });
+
+  /*
+Test case for Task 9.4
+*/
+  test("should include missing authorization check finding in final report", () => {
+    const findings = [
+      {
+        issueType: "Missing Authorization Check",
+        riskLevel: "High",
+        fileName: "routes/admin.js",
+        lineNumber: 12,
+        explanation:
+          "An admin route appears to be exposed without checking whether the user has an admin role.",
+        suggestedFix:
+          'Add role-based authorization middleware such as requireAdmin or checkRole("admin").',
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(findings);
+
+    expect(report).toContain("Security Scan Report");
+    expect(report).toContain("Total Findings   : 1");
+    expect(report).toContain("High-Risk Issues : 1");
+
+    expect(report).toContain("Issue Type : Missing Authorization Check");
+    expect(report).toContain("Risk Level : High");
+    expect(report).toContain("File       : routes/admin.js");
+    expect(report).toContain("Line       : 12");
+    expect(report).toContain("Source     : local");
+
+    expect(report).toContain("Explanation:");
+    expect(report).toContain(
+      "An admin route appears to be exposed without checking whether the user has an admin role."
+    );
+
+    expect(report).toContain("Suggested Fix:");
+    expect(report).toContain(
+      'Add role-based authorization middleware such as requireAdmin or checkRole("admin").'
     );
   });
 });

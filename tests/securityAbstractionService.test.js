@@ -171,4 +171,46 @@ describe("createAbstractDescription", () => {
     expect(result.geminiSafeSummary).not.toContain("welcome");
     expect(result.geminiSafeSummary).not.toContain('password.equals("welcome")');
   });
+
+  /*
+Test case for story 9 - task 9.3
+*/
+  test("should create safe summary for missing authorization finding", () => {
+    const finding = {
+      issueType: "Missing Authorization Check",
+      riskLevel: "High",
+      fileName: "routes/admin.js",
+      lineNumber: 12,
+      explanation:
+        "An admin route appears to be exposed without checking whether the user has an admin role.",
+      suggestedFix:
+        "Add role-based authorization middleware such as requireAdmin or checkRole('admin').",
+      rawCode: 'app.get("/admin", (req, res) => { res.send("admin panel"); });'
+    };
+
+    const result = createAbstractDescription(finding);
+
+    expect(result.issueType).toBe("Missing Authorization Check");
+    expect(result.riskLevel).toBe("High");
+    expect(result.fileName).toBe("routes/admin.js");
+    expect(result.lineNumber).toBe(12);
+
+    expect(result.description).toBe(
+      "Admin route appears to be defined without role-based authorization middleware."
+    );
+
+    expect(result.geminiSafeSummary).toContain(
+      "Issue Type: Missing Authorization Check"
+    );
+    expect(result.geminiSafeSummary).toContain("Risk Level: High");
+    expect(result.geminiSafeSummary).toContain("File: routes/admin.js");
+    expect(result.geminiSafeSummary).toContain("Line: 12");
+    expect(result.geminiSafeSummary).toContain(
+      "Safe Description: Admin route appears to be defined without role-based authorization middleware."
+    );
+
+    expect(result.geminiSafeSummary).not.toContain('app.get("/admin"');
+    expect(result.geminiSafeSummary).not.toContain("router.post");
+    expect(result.geminiSafeSummary).not.toContain("deleteUser");
+  });
 });
