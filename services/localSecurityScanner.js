@@ -188,6 +188,16 @@ function scanSecurityPatterns(codeDiff) {
       findings.push(missingValidationFinding);
     }
 
+    const missingAuthorizationFinding = detectMissingAuthorization(
+      line,
+      currentFileName,
+      index
+    );
+
+    if (missingAuthorizationFinding) {
+      findings.push(missingAuthorizationFinding);
+    }
+
     securityPatterns.forEach((pattern) => {
       if (pattern.regex.test(line)) {
         findings.push(
@@ -244,6 +254,37 @@ function detectMissingValidation(lines, currentFileName, startIndex) {
   }
 
   return null;
+}
+
+function detectMissingAuthorization(line, currentFileName, lineIndex) {
+  const adminRoutePattern =
+    /(app|router)\.(get|post|put|patch|delete)\s*\(\s*["'`]\/admin[^"'`]*["'`]/;
+
+  const hasAdminRoute = adminRoutePattern.test(line);
+
+  if (!hasAdminRoute) {
+    return null;
+  }
+
+  const hasAuthorizationCheck =
+    line.includes("requireAdmin") ||
+    line.includes('checkRole("admin")') ||
+    line.includes("checkRole('admin')");
+
+  if (hasAuthorizationCheck) {
+    return null;
+  }
+
+  return createFinding({
+    issueType: "Missing Authorization Check",
+    riskLevel: "High",
+    explanation:
+      "An admin route appears to be exposed without checking whether the user has an admin role.",
+    suggestedFix:
+      "Add role-based authorization middleware such as requireAdmin or checkRole('admin').",
+    fileName: currentFileName,
+    lineNumber: lineIndex + 1,
+  });
 }
 
 module.exports = {

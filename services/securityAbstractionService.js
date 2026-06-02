@@ -68,6 +68,12 @@ function getSafePatternDescription(issueType = "") {
   ) {
     return "Code appears to collect or transmit sensitive data in a suspicious way.";
   }
+  if (
+    normalizedIssueType.includes("missing authorization") ||
+    normalizedIssueType.includes("authorization check")
+  ) {
+    return "Admin route appears to be defined without role-based authorization middleware.";
+  }
 
   return "A potentially risky security pattern was detected and summarized without raw code.";
 }

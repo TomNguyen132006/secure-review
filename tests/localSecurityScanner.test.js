@@ -512,5 +512,190 @@ diff --git a/src/UserController.java b/src/UserController.java
       expect(missingValidationFinding.riskLevel).toBe("Medium");
     });
   });
-  
+  /*
+  Test case for story 9 - Task 9.1 :
+  */
+  describe("Local Security Scanner - Authorization Mistakes", () => {
+    test("should detect admin route without role protection", () => {
+      const codeDiff = `
+diff --git a/src/routes/admin.js b/src/routes/admin.js
++++ b/src/routes/admin.js
+@@
++ app.get("/admin", (req, res) => {
++   res.send("admin panel");
++ });
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Authorization Check",
+            riskLevel: "High",
+            fileName: "src/routes/admin.js",
+            lineNumber: expect.any(Number),
+          }),
+        ])
+      );
+    });
+
+    test("should detect admin delete route without role protection", () => {
+      const codeDiff = `
+diff --git a/src/routes/admin.js b/src/routes/admin.js
++++ b/src/routes/admin.js
+@@
++ router.post("/admin/delete-user", (req, res) => {
++   deleteUser(req.body.id);
++ });
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Authorization Check",
+            riskLevel: "High",
+            fileName: "src/routes/admin.js",
+          }),
+        ])
+      );
+    });
+
+    test("should not flag admin route protected by requireAdmin", () => {
+      const codeDiff = `
+diff --git a/src/routes/admin.js b/src/routes/admin.js
++++ b/src/routes/admin.js
+@@
++ app.get("/admin", requireAdmin, (req, res) => {
++   res.send("admin panel");
++ });
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(
+        findings.some(
+          (finding) => finding.issueType === "Missing Authorization Check"
+        )
+      ).toBe(false);
+    });
+
+    test("should not flag admin route protected by checkRole admin", () => {
+      const codeDiff = `
+diff --git a/src/routes/admin.js b/src/routes/admin.js
++++ b/src/routes/admin.js
+@@
++ router.post("/admin/delete-user", checkRole("admin"), (req, res) => {
++   deleteUser(req.body.id);
++ });
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      expect(
+        findings.some(
+          (finding) => finding.issueType === "Missing Authorization Check"
+        )
+      ).toBe(false);
+    });
+
+    test("authorization finding should include required fields", () => {
+      const codeDiff = `
+diff --git a/src/routes/admin.js b/src/routes/admin.js
++++ b/src/routes/admin.js
+@@
++ app.get("/admin", (req, res) => {
++   res.send("admin panel");
++ });
+`;
+
+      const findings = scanSecurityPatterns(codeDiff);
+
+      const authorizationFinding = findings.find(
+        (finding) => finding.issueType === "Missing Authorization Check"
+      );
+
+      expect(authorizationFinding).toBeDefined();
+      expect(authorizationFinding).toHaveProperty("issueType");
+      expect(authorizationFinding).toHaveProperty("riskLevel");
+      expect(authorizationFinding).toHaveProperty("fileName");
+      expect(authorizationFinding).toHaveProperty("lineNumber");
+      expect(authorizationFinding).toHaveProperty("explanation");
+      expect(authorizationFinding).toHaveProperty("suggestedFix");
+
+      expect(authorizationFinding.issueType).toBe("Missing Authorization Check");
+      expect(authorizationFinding.riskLevel).toBe("High");
+    });
+
+    test("should handle empty input safely for authorization detection", () => {
+      const findings = scanSecurityPatterns("");
+
+      expect(findings).toEqual([]);
+    });
+  });
+
+  /*
+Test case for story 9.2:
+These tests make sure the local scanner can detect admin routes
+that are missing authorization checks.
+*/
+  describe("Local Security Scanner - Authorization Detection", () => {
+    test("detects admin endpoint without role protection", () => {
+      const diff = `
++ app.get("/admin", (req, res) => {
++   res.send("admin panel");
++ });
+`;
+
+      const findings = scanSecurityPatterns(diff);
+
+      expect(findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Authorization Check",
+            riskLevel: "High",
+          }),
+        ])
+      );
+    });
+
+    test("does not flag admin endpoint protected by requireAdmin", () => {
+      const diff = `
++ app.get("/admin", requireAdmin, (req, res) => {
++   res.send("admin panel");
++ });
+`;
+
+      const findings = scanSecurityPatterns(diff);
+
+      expect(findings).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Authorization Check",
+          }),
+        ])
+      );
+    });
+
+    test("does not flag admin endpoint protected by checkRole admin", () => {
+      const diff = `
++ router.post("/admin/delete-user", checkRole("admin"), (req, res) => {
++   res.send("deleted");
++ });
+`;
+
+      const findings = scanSecurityPatterns(diff);
+
+      expect(findings).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            issueType: "Missing Authorization Check",
+          }),
+        ])
+      );
+    });
+  });
+
 });
