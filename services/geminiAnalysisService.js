@@ -141,8 +141,153 @@ async function analyzeSecurityFinding(finding) {
   }
 }
 
+/*
+  Task 10.1 + 10.2 + 10.3:
+    Send a full merge request diff to Gemini for AI security review.
+    Handle timeout and API failures safely.
+*/
+async function analyzeDiffWithGemini(diff) {
+  if (!diff || diff.trim() === "") {
+    return {
+      success: false,
+      source: "gemini",
+      error: "No diff provided for Gemini analysis",
+    };
+  }
+
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!apiKey) {
+      return {
+        success: false,
+        source: "gemini",
+        error: "Missing GEMINI_API_KEY environment variable",
+      };
+    }
+
+    const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+
+    const prompt = `
+You are a senior application security engineer.
+
+Review the following GitLab merge request diff for security issues.
+Return clear security feedback including:
+- issue type
+- risk level
+- explanation
+- suggested fix
+
+[DIFF START]
+${diff}
+[DIFF END]
+`;
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+    };
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    if (typeof timeout.unref === "function") {
+      timeout.unref();
+    }
+
+    let response;
+
+    try {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        }
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      if (response.status === 400) {
+        return {
+          success: false,
+          source: "gemini",
+          error: "Gemini request was blocked or invalid",
+        };
+      }
+
+      if (response.status === 401 || response.status === 403) {
+        return {
+          success: false,
+          source: "gemini",
+          error: "Gemini API key is invalid or unauthorized",
+        };
+      }
+
+      if (response.status >= 500) {
+        return {
+          success: false,
+          source: "gemini",
+          error: "Gemini server error",
+        };
+      }
+
+      return {
+        success: false,
+        source: "gemini",
+        error: "Gemini API request failed",
+      };
+    }
+
+    const responseBody = await response.json();
+    const geminiText = extractGeminiText(responseBody);
+
+    if (!geminiText) {
+      return {
+        success: false,
+        source: "gemini",
+        error: "Gemini returned an invalid response format",
+      };
+    }
+
+    return {
+      success: true,
+      source: "gemini",
+      message: geminiText,
+    };
+  } catch (error) {
+    if (error.name === "AbortError") {
+      return {
+        success: false,
+        source: "gemini",
+        error: "Gemini request timed out",
+      };
+    }
+
+    return {
+      success: false,
+      source: "gemini",
+      error: "Gemini API request failed",
+    };
+  }
+}
+
 module.exports = {
   analyzeSecurityFinding,
+  analyzeDiffWithGemini,
   buildFallbackFinding,
   buildGeminiPrompt,
   extractGeminiText,

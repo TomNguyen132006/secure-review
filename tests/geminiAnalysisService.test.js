@@ -1,4 +1,7 @@
-const { analyzeSecurityFinding } = require("../services/geminiAnalysisService");
+const {
+  analyzeSecurityFinding,
+  analyzeDiffWithGemini,
+} = require("../services/geminiAnalysisService");
 
 jest.mock("../services/securityAbstractionService", () => ({
   createAbstractDescription: jest.fn(() => ({
@@ -128,5 +131,87 @@ describe("geminiAnalysisService", () => {
     expect(result.explanation).toBe(localFinding.explanation);
     expect(result.suggestedFix).toBe(localFinding.suggestedFix);
     expect(result.source).toBe("local-fallback");
+  });
+  test("analyzeDiffWithGemini sends diff to Gemini successfully", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: "Gemini found one possible security issue.",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+
+    const diff = `
+diff --git a/app.js b/app.js
++ const password = "123456";
+`;
+
+    const result = await analyzeDiffWithGemini(diff);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
+    expect(result.source).toBe("gemini");
+    expect(result.message).toBe("Gemini found one possible security issue.");
+  });
+
+  test("analyzeDiffWithGemini returns error when diff is empty", async () => {
+    const result = await analyzeDiffWithGemini("");
+
+    expect(result.success).toBe(false);
+    expect(result.source).toBe("gemini");
+    expect(result.error).toBe("No diff provided for Gemini analysis");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test("analyzeDiffWithGemini handles Gemini timeout safely", async () => {
+    global.fetch.mockImplementation(() => {
+      const error = new Error("The operation was aborted");
+      error.name = "AbortError";
+
+      return Promise.reject(error);
+    });
+
+    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
+
+    expect(result.success).toBe(false);
+    expect(result.source).toBe("gemini");
+    expect(result.error).toBe("Gemini request timed out");
+  });
+
+  test("analyzeDiffWithGemini handles Gemini API failure safely", async () => {
+    global.fetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
+
+    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
+
+    expect(result.success).toBe(false);
+    expect(result.source).toBe("gemini");
+    expect(result.error).toBe("Gemini server error");
+  });
+
+  test("analyzeDiffWithGemini does not crash when Gemini response is invalid", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [],
+      }),
+    });
+
+    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
+
+    expect(result.success).toBe(false);
+    expect(result.source).toBe("gemini");
+    expect(result.error).toBe("Gemini returned an invalid response format");
   });
 });
