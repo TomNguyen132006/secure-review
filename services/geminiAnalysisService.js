@@ -1,10 +1,12 @@
 const { createAbstractDescription } = require("./securityAbstractionService");
+const {
+  parseGeminiResponse,
+} = require("./geminiResponseParserService");
 
 const DEFAULT_MODEL = "gemini-1.5-flash";
 
 /*
   Task 6.5 : Return a safe local result when Gemini is unavailable.
-
 */
 function buildFallbackFinding(finding) {
   return {
@@ -47,22 +49,14 @@ Return a concise explanation and remediation.
 /*
   Purpose:
     Safely read Gemini's text response.
-
 */
 function extractGeminiText(responseBody) {
   return responseBody?.candidates?.[0]?.content?.parts?.[0]?.text || null;
 }
 
 /*
-
   Purpose:
     Send a safe abstract description to Gemini for explanation.
-
-  Flow:
-    1. Create abstract description from local finding.
-    2. Send only the abstract description to Gemini.
-    3. If Gemini succeeds, return enhanced result.
-    4. If Gemini fails, return local fallback result.
 */
 async function analyzeSecurityFinding(finding) {
   const fallbackFinding = buildFallbackFinding(finding);
@@ -142,9 +136,10 @@ async function analyzeSecurityFinding(finding) {
 }
 
 /*
-  Task 10.1 + 10.2 + 10.3:
+  Task 10.1 + 10.2 + 10.3 + 11.3:
     Send a full merge request diff to Gemini for AI security review.
     Handle timeout and API failures safely.
+    Parse Gemini structured JSON response safely.
 */
 async function analyzeDiffWithGemini(diff) {
   if (!diff || diff.trim() === "") {
@@ -172,11 +167,14 @@ async function analyzeDiffWithGemini(diff) {
 You are a senior application security engineer.
 
 Review the following GitLab merge request diff for security issues.
-Return clear security feedback including:
-- issue type
-- risk level
-- explanation
-- suggested fix
+
+Return ONLY valid JSON in this exact format:
+{
+  "riskLevel": "High",
+  "issueType": "SQL Injection",
+  "explanation": "User input appears to be directly used in a SQL query.",
+  "suggestedFix": "Use parameterized queries or prepared statements."
+}
 
 [DIFF START]
 ${diff}
@@ -259,14 +257,27 @@ ${diff}
       return {
         success: false,
         source: "gemini",
-        error: "Gemini returned an invalid response format",
+        error: "Invalid Gemini response format.",
+      };
+    }
+
+    const parsedResponse = parseGeminiResponse(geminiText);
+
+    if (!parsedResponse.success) {
+      return {
+        success: false,
+        source: "gemini",
+        error: parsedResponse.error,
       };
     }
 
     return {
       success: true,
       source: "gemini",
-      message: geminiText,
+      riskLevel: parsedResponse.riskLevel,
+      issueType: parsedResponse.issueType,
+      explanation: parsedResponse.explanation,
+      suggestedFix: parsedResponse.suggestedFix,
     };
   } catch (error) {
     if (error.name === "AbortError") {
@@ -283,6 +294,7 @@ ${diff}
       error: "Gemini API request failed",
     };
   }
+  
 }
 
 module.exports = {
