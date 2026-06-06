@@ -141,7 +141,12 @@ describe("geminiAnalysisService", () => {
             content: {
               parts: [
                 {
-                  text: "Gemini found one possible security issue.",
+                  text: JSON.stringify({
+                    riskLevel: "High",
+                    issueType: "Hardcoded Password",
+                    explanation: "A password appears to be hardcoded in the code.",
+                    suggestedFix: "Move the password to an environment variable or secret manager.",
+                  }),
                 },
               ],
             },
@@ -160,7 +165,14 @@ diff --git a/app.js b/app.js
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(result.success).toBe(true);
     expect(result.source).toBe("gemini");
-    expect(result.message).toBe("Gemini found one possible security issue.");
+    expect(result.riskLevel).toBe("High");
+    expect(result.issueType).toBe("Hardcoded Password");
+    expect(result.explanation).toBe(
+      "A password appears to be hardcoded in the code."
+    );
+    expect(result.suggestedFix).toBe(
+      "Move the password to an environment variable or secret manager."
+    );
   });
 
   test("analyzeDiffWithGemini returns error when diff is empty", async () => {
@@ -212,6 +224,96 @@ diff --git a/app.js b/app.js
 
     expect(result.success).toBe(false);
     expect(result.source).toBe("gemini");
-    expect(result.error).toBe("Gemini returned an invalid response format");
+    expect(result.error).toBe("Invalid Gemini response format.");
+  });
+  test("analyzeDiffWithGemini returns structured parsed Gemini response", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    riskLevel: "High",
+                    issueType: "SQL Injection",
+                    explanation:
+                      "User input appears to be directly used in a SQL query.",
+                    suggestedFix:
+                      "Use parameterized queries or prepared statements.",
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
+
+    expect(result.success).toBe(true);
+    expect(result.source).toBe("gemini");
+    expect(result.riskLevel).toBe("High");
+    expect(result.issueType).toBe("SQL Injection");
+    expect(result.explanation).toBe(
+      "User input appears to be directly used in a SQL query."
+    );
+    expect(result.suggestedFix).toBe(
+      "Use parameterized queries or prepared statements."
+    );
+  });
+
+  test("analyzeDiffWithGemini returns error when Gemini response is invalid", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: "This is normal text, not JSON.",
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
+
+    expect(result.success).toBe(false);
+    expect(result.source).toBe("gemini");
+    expect(result.error).toBe("Invalid Gemini response format.");
+  });
+  test("analyzeDiffWithGemini returns safe error when Gemini JSON is missing required fields", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        candidates: [
+          {
+            content: {
+              parts: [
+                {
+                  text: JSON.stringify({
+                    riskLevel: "High",
+                    issueType: "SQL Injection",
+                  }),
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
+
+    expect(result.success).toBe(false);
+    expect(result.source).toBe("gemini");
+    expect(result.error).toBe("Invalid Gemini response format.");
   });
 });
