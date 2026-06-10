@@ -55,7 +55,7 @@ describe("scan command", () => {
       from: "user",
     });
 
-    expect(mockAuthService.isGitLabConnected).toHaveBeenCalled();
+    expect(mockAuthService.getGitLabToken).toHaveBeenCalled();
 
     expect(mockConsole.error).toHaveBeenCalledWith(
       "ERROR: Please login first using secure-review login --token <token>"

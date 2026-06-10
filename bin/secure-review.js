@@ -35,24 +35,28 @@ function createCli(options = {}) {
       getGitLabUsername,
     };
   const mergeRequestService = options.mergeRequestService;
+  const hybridScannerService =
+    options.hybridScannerService || {
+      runHybridScan,
+    };
 
   program
     .name("secure-review")
     .description("AI security code review CLI for GitLab merge requests")
     .version("1.0.0");
 
- /*
-  Command:
-    node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123
-
-  Purpose:
-    Scan a GitLab merge request by ID.
-
-  Supports three flows:
-    1. Injected mock mergeRequestService flow for older unit tests.
-    2. Legacy secret scanner flow for older secret scanner tests.
-    3. New Story 6.7 hybrid scanner flow for the real CLI.
-  */
+  /*
+   Command:
+     node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123
+ 
+   Purpose:
+     Scan a GitLab merge request by ID.
+ 
+   Supports three flows:
+     1. Injected mock mergeRequestService flow for older unit tests.
+     2. Legacy secret scanner flow for older secret scanner tests.
+     3. New Story 6.7 hybrid scanner flow for the real CLI.
+   */
   program
     .command("scan")
     .description("Scan a GitLab merge request for security risks")
@@ -78,38 +82,14 @@ function createCli(options = {}) {
             The CLI should not scan private GitLab merge requests unless
             the user has logged in.
         */
-        if (authService && authService.isGitLabConnected) {
-          const connected = authService.isGitLabConnected();
-
-          if (!connected) {
-            output.error(
-              "ERROR: Please login first using secure-review login --token <token>"
-            );
-            process.exitCode = 1;
-            return;
-          }
-        }
-
-        /*
-          Step 3:
-            Read the GitLab token.
-
-          Priority:
-            1. Use injected authService in tests.
-            2. Otherwise, read token from local saved config.
-        */
         let token;
 
-        if (authService && authService.getGitLabToken) {
-          token = authService.getGitLabToken();
+        if (options.authService && options.authService.getGitLabToken) {
+          token = options.authService.getGitLabToken();
         } else {
           token = readSavedToken();
         }
 
-        /*
-          Step 4:
-            Stop if no GitLab token exists.
-        */
         if (!token) {
           output.error(
             "ERROR: Please login first using secure-review login --token <token>"
@@ -117,6 +97,8 @@ function createCli(options = {}) {
           process.exitCode = 1;
           return;
         }
+
+
 
         /*
           Step 5:
@@ -237,11 +219,13 @@ function createCli(options = {}) {
             6. Fall back when Gemini fails.
             7. Create the final terminal report.
         */
-        const scanResult = await runHybridScan({
+        const scanResult = await hybridScannerService.runHybridScan({
           projectId,
           mrId: commandOptions.mr,
           token,
         });
+
+        output.log(scanResult.report);
 
         /*
           Step 7:
