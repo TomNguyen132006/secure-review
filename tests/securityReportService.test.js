@@ -1,4 +1,9 @@
-const { createSecurityReport } = require("../services/securityReportService");
+const {
+  createSecurityReport,
+  formatFinding,
+  formatValue,
+  isHighRisk,
+} = require("../services/securityReportService");
 
 describe("securityReportService", () => {
   test("creates a report with local scanner findings", () => {
@@ -322,5 +327,105 @@ Test case for Task 9.4
     expect(report).toContain(
       'Add role-based authorization middleware such as requireAdmin or checkRole("admin").'
     );
+  });
+  /*
+  Story 12 - Task 12.3
+  Test that each finding is formatted clearly in the terminal report.
+*/
+  test("should format each security finding clearly", () => {
+    const findings = [
+      {
+        issueType: "Missing Authorization Check",
+        riskLevel: "High",
+        fileName: "routes/admin.js",
+        lineNumber: 12,
+        explanation:
+          "An admin route appears to be exposed without checking whether the user has an admin role.",
+        suggestedFix:
+          "Add role-based authorization middleware such as requireAdmin or checkRole('admin').",
+        source: "local",
+      },
+    ];
+
+    const report = createSecurityReport(findings);
+
+    expect(report).toContain("Issue Type : Missing Authorization Check");
+    expect(report).toContain("Risk Level : High");
+    expect(report).toContain("File       : routes/admin.js");
+    expect(report).toContain("Line       : 12");
+    expect(report).toContain("Source     : local");
+
+    expect(report).toContain("Explanation:");
+    expect(report).toContain(
+      "An admin route appears to be exposed without checking whether the user has an admin role."
+    );
+
+    expect(report).toContain("Suggested Fix:");
+    expect(report).toContain(
+      "Add role-based authorization middleware such as requireAdmin or checkRole('admin')."
+    );
+  });
+
+  /*
+  Story 12 - Task 12.4
+  Test that the terminal report shows a clean message when no findings exist.
+*/
+  test("should show clean no-issues message when no findings exist", () => {
+    const report = createSecurityReport([]);
+
+    expect(report).toContain("Security Scan Report");
+    expect(report).toContain("No security issues found.");
+    expect(report).toContain("End of Report");
+  });
+  /*
+  Story 12 - Task 12.6
+  Test report service helper functions separately from the CLI.
+*/
+  test("formatValue should return fallback when value is missing", () => {
+    expect(formatValue(undefined)).toBe("Not provided");
+    expect(formatValue(null)).toBe("Not provided");
+    expect(formatValue("")).toBe("Not provided");
+  });
+
+  test("formatValue should return original value when value exists", () => {
+    expect(formatValue("config.js")).toBe("config.js");
+    expect(formatValue(12)).toBe(12);
+  });
+
+  test("isHighRisk should detect high and critical risk levels", () => {
+    expect(isHighRisk("High")).toBe(true);
+    expect(isHighRisk("Critical")).toBe(true);
+  });
+
+  test("isHighRisk should return false for lower risk levels", () => {
+    expect(isHighRisk("Medium")).toBe(false);
+    expect(isHighRisk("Low")).toBe(false);
+    expect(isHighRisk("Unknown")).toBe(false);
+  });
+
+  test("formatFinding should format a single finding clearly", () => {
+    const finding = {
+      issueType: "Hardcoded Password",
+      riskLevel: "High",
+      fileName: "config.js",
+      lineNumber: 8,
+      explanation: "A password appears to be hardcoded.",
+      suggestedFix: "Move the password into an environment variable.",
+      source: "local",
+    };
+
+    const formattedFinding = formatFinding(finding, 0);
+
+    expect(formattedFinding).toContain("Finding #1");
+    expect(formattedFinding).toContain("!!! HIGH RISK !!!");
+    expect(formattedFinding).toContain("Issue Type : Hardcoded Password");
+    expect(formattedFinding).toContain("Risk Level : High");
+    expect(formattedFinding).toContain("File       : config.js");
+    expect(formattedFinding).toContain("Line       : 8");
+    expect(formattedFinding).toContain("Source     : local");
+    expect(formattedFinding).toContain("Explanation:");
+    expect(formattedFinding).toContain("A password appears to be hardcoded.");
+    expect(formattedFinding).toContain("Suggested Fix:");
+    expect(formattedFinding).toContain("Move the password into an environment variable.");
   });
 });

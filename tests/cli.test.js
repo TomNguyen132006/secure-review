@@ -71,13 +71,13 @@ describe("secure-review CLI", () => {
   test case 2.4 / 2.8
   */
   test("should fail scan when not logged in", () => {
-      expect(() => {
-        execSync("node bin/secure-review.js scan --mr 123", {
-          stdio: "pipe",
-          env: testEnv,
-        });
-      }).toThrow();
-    });
+    expect(() => {
+      execSync("node bin/secure-review.js scan --mr 123", {
+        stdio: "pipe",
+        env: testEnv,
+      });
+    }).toThrow();
+  });
 
   /*
   test 2.5
@@ -99,22 +99,22 @@ describe("secure-review CLI", () => {
       });
     }).toThrow();
   });
-  
+
   /*
     test case 2.6
     */
-    test("should logout successfully", () => {
-      execSync("node bin/secure-review.js login --token glpat_xxxxx", {
-        env: testEnv,
-      });
-
-      const output = execSync("node bin/secure-review.js logout", {
-        env: testEnv,
-      }).toString();
-
-      expect(output).toContain("Logged out successfully");
+  test("should logout successfully", () => {
+    execSync("node bin/secure-review.js login --token glpat_xxxxx", {
+      env: testEnv,
     });
-  
+
+    const output = execSync("node bin/secure-review.js logout", {
+      env: testEnv,
+    }).toString();
+
+    expect(output).toContain("Logged out successfully");
+  });
+
   /* 
   test 2.8
   */
@@ -150,5 +150,45 @@ describe("secure-review CLI", () => {
 
     expect(output).toContain("GitLab account disconnected successfully.");
   });
+  /*
+  Story 12 - Task 12.1
+  Test that scan command prints terminal security report after login.
+*/
+  test("should print terminal security report when scan runs after login", () => {
+    // First, login so the scan command is allowed to run
+    execSync("node bin/secure-review.js login --token glpat_testtoken123", {
+      env: testEnv,
+    });
 
+    // Then run scan command
+    const output = execSync("node bin/secure-review.js scan --mr 123", {
+      env: testEnv,
+    }).toString();
+
+    // The scan output should include the final terminal report
+    expect(output).toContain("Security Scan Report");
+    expect(output).toContain("No security issues found.");
+  });
+  /*
+    Story 12 - Task 12.5
+    Test that scan command prints full terminal report structure.
+  */
+  test("should print full terminal report structure after scan", () => {
+    // First, login so the scan command is allowed to run
+    execSync("node bin/secure-review.js login --token glpat_testtoken123", {
+      env: testEnv,
+    });
+
+    // Then run scan command
+    const output = execSync("node bin/secure-review.js scan --mr 123", {
+      env: testEnv,
+    }).toString();
+
+    // The CLI should show scan progress and report structure
+    expect(output).toContain("Using saved GitLab authentication");
+    expect(output).toContain("Scanning merge request 123");
+    expect(output).toContain("Security Scan Report");
+    expect(output).toContain("No security issues found.");
+    expect(output).toContain("End of Report");
+  });
 });
