@@ -1,25 +1,80 @@
 # Secure-Review
 
 Secure Review is a CLI-based AI security code review tool for GitLab merge requests.
-The goal is to help developers connect their GitLab account, validate authentication, scan merge requests, and later generate security risk reports before code is merged.
+
+It helps developers:
+
+* connect their GitLab account
+* scan merge request code changes
+* detect security risks
+* generate terminal reports
+* export Markdown reports
+* post review comments back to GitLab merge requests
 
 ## Project Structure
 
 ```txt
 secure-review/
 ├── backend/
-│   ├── app.js              # Express app and API routes
-│   └── server.js           # Starts backend server
+│   ├── app.js
+│   └── server.js
+│
 ├── bin/
-│   └── secure-review.js    # Main CLI entry point
+│   └── secure-review.js
+│
+├── security/
+│   ├── maskSecret.js
+│   ├── secretPatterns.js
+│   └── secretScanner.js
+│
 ├── services/
-│   ├── gitlabAuthService.js # Saves, reads, disconnects GitLab auth
-│   └── gitlabService.js     # Validates GitLab token with GitLab API
+│   ├── diffChunkService.js
+│   ├── geminiAnalysisService.js
+│   ├── geminiPromptService.js
+│   ├── geminiResponseParserService.js
+│   ├── gitlabAuthService.js
+│   ├── gitlabCommentService.js
+│   ├── gitlabMergeRequestService.js
+│   ├── gitlabService.js
+│   ├── hybridScannerService.js
+│   ├── localSecurityScanner.js
+│   ├── markdownReportService.js
+│   ├── secretScannerService.js
+│   ├── securityAbstractionService.js
+│   ├── securityReportFormatter.js
+│   └── securityReportService.js
+│
 ├── src/
-│   └── AuthService.js       # Basic local auth service
+│   └── AuthService.js
+│
 ├── tests/
-│   └── *.test.js            # Jest tests
+│   ├── authService.test.js
+│   ├── cli.test.js
+│   ├── diffChunkService.test.js
+│   ├── geminiAnalysisService.test.js
+│   ├── geminiPromptService.test.js
+│   ├── geminiResponseParserService.test.js
+│   ├── gitlabAuthService.test.js
+│   ├── gitlabBackend.test.js
+│   ├── gitlabCommentService.test.js
+│   ├── gitlabLogin.test.js
+│   ├── gitlabLogout.test.js
+│   ├── gitlabMergeRequestService.test.js
+│   ├── gitlabService.test.js
+│   ├── hybridScannerService.test.js
+│   ├── localSecurityScanner.test.js
+│   ├── markdownReportService.test.js
+│   ├── scanCommand.test.js
+│   ├── scanCommandSecretScanner.test.js
+│   ├── secretPatterns.test.js
+│   ├── secretScanner.test.js
+│   ├── secretScannerService.test.js
+│   ├── securityAbstractionService.test.js
+│   └── securityReportService.test.js
+│
+├── node_modules/          # Local dependency folder, do not commit
 ├── package.json
+├── package-lock.json
 └── README.md
 ```
 
@@ -27,78 +82,183 @@ secure-review/
 
 Install dependencies:
 
-<pre class="overflow-visible! px-0!" data-start="931" data-end="954"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">npm</span><span> install</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
-
-## Run Tests
+```bash
+npm install
+```
 
 Run all tests:
 
-<pre class="overflow-visible! px-0!" data-start="986" data-end="1006"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">npm</span><span> test</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+npm test
+```
 
 Expected result:
 
-<pre class="overflow-visible! px-0!" data-start="1026" data-end="1070"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute end-1.5 top-1 z-2 md:end-2 md:top-1"></div><div class="relative"><div class="pe-11 pt-3"><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span>Test Suites: passed</span><br/><span>Tests: passed</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```txt
+Test Suites: passed
+Tests: passed
+```
 
 ## CLI Commands
 
 Show help:
 
-<pre class="overflow-visible! px-0!" data-start="1101" data-end="1145"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">node</span><span> bin/secure-review.js </span><span class="ͼn">--help</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+node bin/secure-review.js --help
+```
 
 Login with GitLab token:
 
-<pre class="overflow-visible! px-0!" data-start="1173" data-end="1236"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">node</span><span> bin/secure-review.js login </span><span class="ͼn">--token</span><span> glpat_xxxxx</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+node bin/secure-review.js login --token glpat_xxxxx
+```
 
 Scan a merge request:
 
-<pre class="overflow-visible! px-0!" data-start="1261" data-end="1312"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">node</span><span> bin/secure-review.js scan </span><span class="ͼn">--mr</span><span></span><span class="ͼj">123</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123
+```
+
+Export a Markdown report:
+
+```bash
+node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123 --markdown
+```
+
+Export Markdown to a custom file:
+
+```bash
+node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123 --markdown --output report.md
+```
+
+Post the security report as a GitLab merge request comment:
+
+```bash
+node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123 --comment
+```
+
+Export Markdown and post GitLab comment together:
+
+```bash
+node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123 --markdown --comment
+```
 
 Logout:
 
-<pre class="overflow-visible! px-0!" data-start="1323" data-end="1367"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">node</span><span> bin/secure-review.js logout</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+node bin/secure-review.js logout
+```
 
 GitLab connect flow:
 
-<pre class="overflow-visible! px-0!" data-start="1391" data-end="1521"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">node</span><span> bin/secure-review.js gitlab login</span><br/><span class="ͼl">node</span><span> bin/secure-review.js gitlab status</span><br/><span class="ͼl">node</span><span> bin/secure-review.js gitlab logout</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+node bin/secure-review.js gitlab login
+node bin/secure-review.js gitlab status
+node bin/secure-review.js gitlab logout
+```
 
 ## Backend Server
 
-Start the Express backend:
+Start backend server:
 
-<pre class="overflow-visible! px-0!" data-start="1570" data-end="1603"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">npm</span><span> run </span><span class="ͼl">start</span><span>:backend</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+npm run start:backend
+```
 
-The backend runs on:
+Backend runs on:
 
-<pre class="overflow-visible! px-0!" data-start="1627" data-end="1659"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute end-1.5 top-1 z-2 md:end-2 md:top-1"></div><div class="relative"><div class="pe-11 pt-3"><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span>http://localhost:3000</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```txt
+http://localhost:3000
+```
 
 Current backend endpoint:
 
-<pre class="overflow-visible! px-0!" data-start="1688" data-end="1730"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute end-1.5 top-1 z-2 md:end-2 md:top-1"></div><div class="relative"><div class="pe-11 pt-3"><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span>POST /api/gitlab/validate-token</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```txt
+POST /api/gitlab/validate-token
+```
 
 Example request body:
 
-<pre class="overflow-visible! px-0!" data-start="1755" data-end="1795"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span>{</span><br/><span>  "token": </span><span class="ͼk">"glpat_xxxxx"</span><br/><span>}</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```json
+{
+  "token": "glpat_xxxxx"
+}
+```
 
-## Stop Backend Server
+Stop backend server:
 
-If the backend is running in the terminal, stop it with:
+```bash
+CTRL + C
+```
 
-<pre class="overflow-visible! px-0!" data-start="1879" data-end="1898"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute end-1.5 top-1 z-2 md:end-2 md:top-1"></div><div class="relative"><div class="pe-11 pt-3"><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span>CTRL + C</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+If port 3000 is still busy:
 
-If port 3000 is still busy, find the process:
+```bash
+lsof -i :3000
+kill -9 <PID>
+```
 
-<pre class="overflow-visible! px-0!" data-start="1947" data-end="1972"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span>lsof </span><span class="ͼn">-i</span><span> :3000</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
-
-Then kill it:
-
-<pre class="overflow-visible! px-0!" data-start="1989" data-end="2014"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">kill</span><span></span><span class="ͼn">-9</span><span> <PID></span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
-
-## Git Workflow
+## Git Workflow Notes
 
 Before starting new work:
 
-<pre class="overflow-visible! px-0!" data-start="2060" data-end="2092"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">git</span><span> pull origin main</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+git status
+git pull origin main
+npm install
+npm test
+```
 
 Before pushing:
 
-<pre class="overflow-visible! px-0!" data-start="2111" data-end="2202"><div class="relative w-full mt-4 mb-1"><div class=""><div class="relative"><div class="h-full min-h-0 min-w-0"><div class="h-full min-h-0 min-w-0"><div class="border border-token-border-light border-radius-3xl corner-superellipse/1.1 rounded-3xl"><div class="h-full w-full border-radius-3xl bg-token-bg-elevated-secondary corner-superellipse/1.1 overflow-clip rounded-3xl lxnfua_clipPathFallback"><div class="pointer-events-none absolute inset-x-4 top-12 bottom-4"><div class="pointer-events-none sticky z-40 shrink-0 z-1!"><div class="sticky bg-token-border-light"></div></div></div><div class="relative"><div class=""><div class="relative z-0 flex max-w-full"><div id="code-block-viewer" dir="ltr" class="q9tKkq_viewer cm-editor z-10 light:cm-light dark:cm-light flex h-full w-full flex-col items-stretch ͼd ͼr"><div class="cm-scroller"><pre class="cm-content q9tKkq_readonly m-0"><code><span class="ͼl">npm</span><span> test</span><br/><span class="ͼl">git</span><span> status</span><br/><span class="ͼl">git</span><span> add .</span><br/><span class="ͼl">git</span><span> commit </span><span class="ͼn">-m</span><span></span><span class="ͼk">"your message"</span><br/><span class="ͼl">git</span><span> push origin main</span></code></pre></div></div></div></div></div></div></div></div></div><div class=""><div class=""></div></div></div></div></div></pre>
+```bash
+npm test
+git status
+```
+
+Only add files related to your task. Do not commit `node_modules`.
+
+Good example:
+
+```bash
+git add bin/secure-review.js
+git add services/markdownReportService.js
+git add tests/markdownReportService.test.js
+```
+
+Bad example:
+
+```bash
+git add .
+```
+
+Use this commit format:
+
+```bash
+git commit -m "Story 13 | Minh | Add markdown report export"
+```
+
+For combined work:
+
+```bash
+git commit -m "Story 13 and 14 | Minh | Add markdown export and GitLab MR comment posting"
+```
+
+Push to main:
+
+```bash
+git push origin main
+```
+
+If `node_modules` appears in `git status`, clean it before committing:
+
+```bash
+git restore node_modules
+rm -rf node_modules/fsevents
+```
+
+Then check again:
+
+```bash
+git status
+```
