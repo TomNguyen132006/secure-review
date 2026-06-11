@@ -21,6 +21,13 @@ const readline = require("readline");
 
 const { formatSecurityReport } = require("../services/securityReportFormatter");
 
+const {
+  createMarkdownReport,
+  saveMarkdownReport,
+} = require("../services/markdownReportService");
+
+const { postMergeRequestComment } = require("../services/gitlabCommentService");
+
 function createCli(options = {}) {
   const program = new Command();
 
@@ -62,6 +69,9 @@ function createCli(options = {}) {
     .description("Scan a GitLab merge request for security risks")
     .option("--mr <id>", "GitLab merge request ID")
     .option("--project <id>", "GitLab project ID or path")
+    .option("--markdown", "Export security report as Markdown")
+    .option("--output <file>", "Markdown output file path")
+    .option("--comment", "Post security report as a GitLab merge request comment")
     .action(async (commandOptions) => {
       try {
         /*
@@ -227,11 +237,39 @@ function createCli(options = {}) {
 
         output.log(scanResult.report);
 
-        /*
-          Step 7:
-            Print final combined report.
-        */
-        output.log(scanResult.report);
+        if (commandOptions.markdown) {
+          const markdown = createMarkdownReport({
+            ...scanResult,
+            mrId: commandOptions.mr,
+          });
+
+          const outputPath = commandOptions.output || "secure-review-report.md";
+          saveMarkdownReport(markdown, outputPath);
+
+          output.log(`Markdown report exported to ${outputPath}`);
+        }
+
+        if (commandOptions.comment) {
+          const markdown = createMarkdownReport({
+            ...scanResult,
+            mrId: commandOptions.mr,
+          });
+
+          const commentResult = await postMergeRequestComment(
+            projectId,
+            commandOptions.mr,
+            token,
+            markdown
+          );
+
+          if (!commentResult.success) {
+            output.error(commentResult.message);
+            process.exitCode = 1;
+            return;
+          }
+
+          output.log(commentResult.message);
+        }
 
         process.exitCode = 0;
         return;
