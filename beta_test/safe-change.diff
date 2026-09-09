@@ -1,0 +1,11 @@
+diff --git a/src/userService.js b/src/userService.js
+index 1111111..2222222 100644
+--- a/src/userService.js
++++ b/src/userService.js
+@@ -1,4 +1,7 @@
+ function getUserDisplayName(user) {
++  if (!user || !user.firstName) {
++    return "Unknown User";
++  }
+   return user.firstName + " " + user.lastName;
+ }
