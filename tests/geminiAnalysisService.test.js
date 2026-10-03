@@ -1,7 +1,6 @@
 const {
   analyzeSecurityFinding,
   analyzeSecurityFindingWithStatus,
-  analyzeDiffWithGemini,
   DEFAULT_MODEL,
 } = require("../services/geminiAnalysisService");
 
@@ -140,190 +139,6 @@ describe("geminiAnalysisService", () => {
     expect(result.suggestedFix).toBe(localFinding.suggestedFix);
     expect(result.source).toBe("local-fallback");
   });
-  test("analyzeDiffWithGemini sends diff to Gemini successfully", async () => {
-    global.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  text: JSON.stringify({
-                    riskLevel: "High",
-                    issueType: "Hardcoded Password",
-                    explanation: "A password appears to be hardcoded in the code.",
-                    suggestedFix: "Move the password to an environment variable or secret manager.",
-                  }),
-                },
-              ],
-            },
-          },
-        ],
-      }),
-    });
-
-    const diff = `
-diff --git a/app.js b/app.js
-+ const password = "123456";
-`;
-
-    const result = await analyzeDiffWithGemini(diff);
-
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(result.success).toBe(true);
-    expect(result.source).toBe("gemini");
-    expect(result.riskLevel).toBe("High");
-    expect(result.issueType).toBe("Hardcoded Password");
-    expect(result.explanation).toBe(
-      "A password appears to be hardcoded in the code."
-    );
-    expect(result.suggestedFix).toBe(
-      "Move the password to an environment variable or secret manager."
-    );
-  });
-
-  test("analyzeDiffWithGemini returns error when diff is empty", async () => {
-    const result = await analyzeDiffWithGemini("");
-
-    expect(result.success).toBe(false);
-    expect(result.source).toBe("gemini");
-    expect(result.error).toBe("No diff provided for Gemini analysis");
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  test("analyzeDiffWithGemini handles Gemini timeout safely", async () => {
-    global.fetch.mockImplementation(() => {
-      const error = new Error("The operation was aborted");
-      error.name = "AbortError";
-
-      return Promise.reject(error);
-    });
-
-    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
-
-    expect(result.success).toBe(false);
-    expect(result.source).toBe("gemini");
-    expect(result.error).toBe("Gemini request timed out");
-  });
-
-  test("analyzeDiffWithGemini handles Gemini API failure safely", async () => {
-    global.fetch.mockResolvedValue({
-      ok: false,
-      status: 500,
-    });
-
-    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
-
-    expect(result.success).toBe(false);
-    expect(result.source).toBe("gemini");
-    expect(result.error).toBe("Gemini server error");
-  });
-
-  test("analyzeDiffWithGemini does not crash when Gemini response is invalid", async () => {
-    global.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        candidates: [],
-      }),
-    });
-
-    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
-
-    expect(result.success).toBe(false);
-    expect(result.source).toBe("gemini");
-    expect(result.error).toBe("Invalid Gemini response format.");
-  });
-  test("analyzeDiffWithGemini returns structured parsed Gemini response", async () => {
-    global.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  text: JSON.stringify({
-                    riskLevel: "High",
-                    issueType: "SQL Injection",
-                    explanation:
-                      "User input appears to be directly used in a SQL query.",
-                    suggestedFix:
-                      "Use parameterized queries or prepared statements.",
-                  }),
-                },
-              ],
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
-
-    expect(result.success).toBe(true);
-    expect(result.source).toBe("gemini");
-    expect(result.riskLevel).toBe("High");
-    expect(result.issueType).toBe("SQL Injection");
-    expect(result.explanation).toBe(
-      "User input appears to be directly used in a SQL query."
-    );
-    expect(result.suggestedFix).toBe(
-      "Use parameterized queries or prepared statements."
-    );
-  });
-
-  test("analyzeDiffWithGemini returns error when Gemini response is invalid", async () => {
-    global.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  text: "This is normal text, not JSON.",
-                },
-              ],
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
-
-    expect(result.success).toBe(false);
-    expect(result.source).toBe("gemini");
-    expect(result.error).toBe("Invalid Gemini response format.");
-  });
-  test("analyzeDiffWithGemini returns safe error when Gemini JSON is missing required fields", async () => {
-    global.fetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  text: JSON.stringify({
-                    riskLevel: "High",
-                    issueType: "SQL Injection",
-                  }),
-                },
-              ],
-            },
-          },
-        ],
-      }),
-    });
-
-    const result = await analyzeDiffWithGemini("diff --git a/app.js b/app.js");
-
-    expect(result.success).toBe(false);
-    expect(result.source).toBe("gemini");
-    expect(result.error).toBe("Invalid Gemini response format.");
-  });
 });
 
 describe("Gemini request safety and skip reasons", () => {
@@ -386,18 +201,6 @@ describe("Gemini request safety and skip reasons", () => {
     expect(request.headers["x-goog-api-key"]).toBe(FAKE_KEY);
   });
 
-  test("analyzeDiffWithGemini also sends the key only in the header", async () => {
-    global.fetch.mockResolvedValue(okResponse);
-
-    await analyzeDiffWithGemini("+ const a = 1;");
-
-    const [url, request] = global.fetch.mock.calls[0];
-
-    expect(url).not.toContain(FAKE_KEY);
-    expect(url).not.toContain("key=");
-    expect(request.headers["x-goog-api-key"]).toBe(FAKE_KEY);
-  });
-
   test("GEMINI_MODEL overrides the default model", async () => {
     process.env.GEMINI_MODEL = "gemini-3.6-flash";
     global.fetch.mockResolvedValue(okResponse);
@@ -446,6 +249,20 @@ describe("Gemini request safety and skip reasons", () => {
     for (const reason of [network.skippedReason, badFormat.skippedReason]) {
       expect(reason).not.toContain(FAKE_KEY);
     }
+  });
+
+  test("explains a timeout without leaking the key", async () => {
+    global.fetch.mockImplementation(() => {
+      const error = new Error("The operation was aborted");
+      error.name = "AbortError";
+
+      return Promise.reject(error);
+    });
+
+    const result = await analyzeSecurityFindingWithStatus(finding);
+
+    expect(result.skippedReason).toBe("Gemini request timed out after 10s");
+    expect(result.finding.source).toBe("local-fallback");
   });
 
   test("returns no skip reason when Gemini succeeds", async () => {

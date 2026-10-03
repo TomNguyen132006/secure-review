@@ -1,7 +1,4 @@
 const { createAbstractDescription } = require("./securityAbstractionService");
-const {
-  parseGeminiResponse,
-} = require("./geminiResponseParserService");
 
 // gemini-1.5-flash was retired in September 2025. gemini-3.8-flash is the
 // newest stable Flash model with no announced shutdown date (checked against
@@ -49,7 +46,7 @@ function describeGeminiHttpError(status, model) {
 
   Returns:
     { ok: true, text }
-    { ok: false, status?, timedOut?, badResponse?, reason }
+    { ok: false, status?, reason }
 */
 async function callGemini(prompt, apiKey) {
   const model = getGeminiModel();
@@ -92,7 +89,6 @@ async function callGemini(prompt, apiKey) {
     if (error.name === "AbortError") {
       return {
         ok: false,
-        timedOut: true,
         reason: `Gemini request timed out after ${GEMINI_TIMEOUT_MS / 1000}s`,
       };
     }
@@ -115,13 +111,13 @@ async function callGemini(prompt, apiKey) {
   try {
     responseBody = await response.json();
   } catch (error) {
-    return { ok: false, badResponse: true, reason: "Gemini returned a response that is not JSON" };
+    return { ok: false, reason: "Gemini returned a response that is not JSON" };
   }
 
   const text = extractGeminiText(responseBody);
 
   if (!text) {
-    return { ok: false, badResponse: true, reason: "Gemini returned an unexpected response format" };
+    return { ok: false, reason: "Gemini returned an unexpected response format" };
   }
 
   return { ok: true, text };
@@ -232,146 +228,6 @@ async function analyzeSecurityFinding(finding) {
   return result;
 }
 
-/*
-  Task 10.1 + 10.2 + 10.3 + 11.3:
-    Send a full merge request diff to Gemini for AI security review.
-    Handle timeout and API failures safely.
-    Parse Gemini structured JSON response safely.
-*/
-async function analyzeDiffWithGemini(diff) {
-  if (!diff || diff.trim() === "") {
-    return {
-      success: false,
-      source: "gemini",
-      error: "No diff provided for Gemini analysis",
-    };
-  }
-
-  try {
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      return {
-        success: false,
-        source: "gemini",
-        error: "Missing GEMINI_API_KEY environment variable",
-      };
-    }
-
-    const prompt = `
-You are a senior application security engineer.
-
-Review the following GitLab merge request diff for security issues.
-
-Return ONLY valid JSON in this exact format:
-{
-  "riskLevel": "High",
-  "issueType": "SQL Injection",
-  "explanation": "User input appears to be directly used in a SQL query.",
-  "suggestedFix": "Use parameterized queries or prepared statements."
-}
-
-[DIFF START]
-${diff}
-[DIFF END]
-`;
-
-    const result = await callGemini(prompt, apiKey);
-
-    if (!result.ok) {
-      if (result.timedOut) {
-        return {
-          success: false,
-          source: "gemini",
-          error: "Gemini request timed out",
-        };
-      }
-
-      if (result.status === 400) {
-        return {
-          success: false,
-          source: "gemini",
-          error: "Gemini request was blocked or invalid",
-        };
-      }
-
-      if (result.status === 401 || result.status === 403) {
-        return {
-          success: false,
-          source: "gemini",
-          error: "Gemini API key is invalid or unauthorized",
-        };
-      }
-
-      if (result.status >= 500) {
-        return {
-          success: false,
-          source: "gemini",
-          error: "Gemini server error",
-        };
-      }
-
-      if (result.status) {
-        return {
-          success: false,
-          source: "gemini",
-          error: "Gemini API request failed",
-        };
-      }
-
-      if (result.badResponse) {
-        return {
-          success: false,
-          source: "gemini",
-          error: "Invalid Gemini response format.",
-        };
-      }
-
-      return {
-        success: false,
-        source: "gemini",
-        error: "Gemini API request failed",
-      };
-    }
-
-    const geminiText = result.text;
-
-    const parsedResponse = parseGeminiResponse(geminiText);
-
-    if (!parsedResponse.success) {
-      return {
-        success: false,
-        source: "gemini",
-        error: parsedResponse.error,
-      };
-    }
-
-    return {
-      success: true,
-      source: "gemini",
-      riskLevel: parsedResponse.riskLevel,
-      issueType: parsedResponse.issueType,
-      explanation: parsedResponse.explanation,
-      suggestedFix: parsedResponse.suggestedFix,
-    };
-  } catch (error) {
-    if (error.name === "AbortError") {
-      return {
-        success: false,
-        source: "gemini",
-        error: "Gemini request timed out",
-      };
-    }
-
-    return {
-      success: false,
-      source: "gemini",
-      error: "Gemini API request failed",
-    };
-  }
-  
-}
-
 module.exports = {
   analyzeSecurityFinding,
   analyzeSecurityFindingWithStatus,
@@ -379,7 +235,6 @@ module.exports = {
   describeGeminiHttpError,
   getGeminiModel,
   DEFAULT_MODEL,
-  analyzeDiffWithGemini,
   buildFallbackFinding,
   buildGeminiPrompt,
   extractGeminiText,
