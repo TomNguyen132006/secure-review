@@ -35,6 +35,14 @@ function getSafePatternDescription(issueType = "") {
     return "Authentication logic compares a password variable directly against a hardcoded weak or default password value.";
   }
 
+  if (normalizedIssueType.includes("password comparison")) {
+    return "Authentication logic compares a password variable directly against a hardcoded string literal.";
+  }
+
+  if (normalizedIssueType.includes("template literal")) {
+    return "A SQL query is built with a template literal that interpolates values directly into the query text.";
+  }
+
   if (normalizedIssueType.includes("api key")) {
     return "Variable assignment of string literal to credential-named identifier.";
   }
