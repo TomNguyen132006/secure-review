@@ -1,4 +1,8 @@
-const { runHybridScan } = require("../services/hybridScannerService");
+const {
+  runHybridScan,
+  getChunkFileName,
+  buildNewFileLineMap,
+} = require("../services/hybridScannerService");
 
 jest.mock("../services/gitlabMergeRequestService", () => ({
   fetchMergeRequestDiff: jest.fn(),
@@ -146,5 +150,57 @@ describe("hybridScannerService", () => {
     ]);
 
     expect(result.report).toBe("Fallback Security Report");
+  });
+});
+
+describe("hybridScannerService failures and diff helpers", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("throws instead of reporting no issues when the MR diff cannot be fetched", async () => {
+    fetchMergeRequestDiff.mockResolvedValue({
+      success: false,
+      message: "Error: Merge request not found.",
+      status: 404,
+    });
+
+    await expect(
+      runHybridScan({ projectId: "group/project", mrId: "999", token: "glpat-xxxxxxxxxxxxxxxxxxxx" })
+    ).rejects.toThrow("Merge request not found.");
+
+    expect(createSecurityReport).not.toHaveBeenCalled();
+  });
+
+  test("getChunkFileName reads the new path from a diff --git header", () => {
+    expect(getChunkFileName("diff --git a/old/name.js b/src/new name.js\n@@ -1 +1 @@\n+x")).toBe(
+      "src/new name.js"
+    );
+    expect(getChunkFileName({ fileName: "app.js" })).toBe("app.js");
+    expect(getChunkFileName("no header here")).toBeUndefined();
+  });
+
+  test("buildNewFileLineMap maps diff lines to new-file line numbers", () => {
+    const chunk = [
+      "diff --git a/a.js b/a.js",
+      "@@ -10,3 +20,3 @@ function x() {",
+      " context",
+      "-removed",
+      "+added",
+      " more context",
+      "@@ -50 +60 @@",
+      "+second hunk",
+    ].join("\n");
+
+    expect(buildNewFileLineMap(chunk)).toEqual([
+      undefined,
+      undefined,
+      20,
+      null,
+      21,
+      22,
+      undefined,
+      60,
+    ]);
   });
 });

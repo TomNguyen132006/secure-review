@@ -11,13 +11,9 @@ const {
 } = require("../services/gitlabAuthService");
 
 const { validateGitLabToken } = require("../services/gitlabService");
-const { fetchMergeRequestDiff } = require("../services/gitlabMergeRequestService");
-const { scanMergeRequestDiff } = require("../security/secretScanner");
 const { runHybridScan } = require("../services/hybridScannerService");
 
 const readline = require("readline");
-
-const { formatSecurityReport } = require("../services/securityReportFormatter");
 
 const {
   createMarkdownReport,
@@ -42,10 +38,13 @@ function createCli(options = {}) {
     validateGitLabToken,
     ...(options.authService || {}),
   };
-  const mergeRequestService = options.mergeRequestService;
   const hybridScannerService =
     options.hybridScannerService || {
       runHybridScan,
+    };
+  const commentService =
+    options.commentService || {
+      postMergeRequestComment,
     };
 
   program
@@ -55,43 +54,39 @@ function createCli(options = {}) {
 
   /*
    Command:
-     node bin/secure-review.js scan --project TomNguyen132006/secure-review --mr 123
- 
+     node bin/secure-review.js scan --project group/project --mr 123
+
    Purpose:
-     Scan a GitLab merge request by ID.
- 
-   Supports three flows:
-     1. Injected mock mergeRequestService flow for older unit tests.
-     2. Legacy secret scanner flow for older secret scanner tests.
-     3. New Story 6.7 hybrid scanner flow for the real CLI.
+     Scan a GitLab merge request by ID with the hybrid scanner
+     (local rules first, then optional Gemini explanations).
    */
   program
     .command("scan")
     .description("Scan a GitLab merge request for security risks")
-    .option("--mr <id>", "GitLab merge request ID")
-    .option("--project <id>", "GitLab project ID or path")
+    .option("--mr <id>", "GitLab merge request ID (the number shown in the MR URL)")
+    .option("--project <id>", "GitLab project ID or path, e.g. group/project")
     .option("--markdown", "Export security report as Markdown")
     .option("--output <file>", "Markdown output file path")
     .option("--comment", "Post security report as a GitLab merge request comment")
     .action(async (commandOptions) => {
       try {
-        /*
-          Step 1:
-            The merge request ID is required.
-        */
         if (!commandOptions.mr) {
           output.error("Error: Missing required option --mr <id>");
           process.exitCode = 1;
           return;
         }
 
-        /*
-          Step 2:
-            If an authService object exists, check whether GitLab is connected.
+        if (!commandOptions.project) {
+          output.error(
+            "Error: Missing required option --project <id> (GitLab project ID or path, e.g. group/project)"
+          );
+          process.exitCode = 1;
+          return;
+        }
 
-          Why:
-            The CLI should not scan private GitLab merge requests unless
-            the user has logged in.
+        /*
+          The CLI should not scan private GitLab merge requests unless
+          the user has logged in.
         */
         const token = authService.getGitLabToken();
 
@@ -101,120 +96,14 @@ function createCli(options = {}) {
           return;
         }
 
+        const projectId = commandOptions.project;
 
-
-        /*
-          Step 5:
-            Decide which GitLab project to scan.
-
-          The user can pass:
-            --project TomNguyen132006/secure-review
-
-          If not provided, use the default hackathon repo.
-        */
-        const projectId =
-          commandOptions.project || "TomNguyen132006/secure-review";
-
-        /*
-          Flow 1:
-            Injected mergeRequestService support.
-
-          Why this exists:
-            scanCommand.test.js expects this exact call:
-              mergeRequestService.scanMergeRequest(mrId, token)
-
-          This keeps older tests passing.
-        */
-        if (mergeRequestService && mergeRequestService.scanMergeRequest) {
-          try {
-            const result = await mergeRequestService.scanMergeRequest(
-              commandOptions.mr,
-              token
-            );
-
-            if (result.success === false) {
-              output.error(result.message);
-              process.exitCode = 1;
-              return;
-            }
-
-            output.log(result.message);
-            process.exitCode = 0;
-            return;
-          } catch (error) {
-            output.error(`ERROR: ${error.message}`);
-            process.exitCode = 1;
-            return;
-          }
-        }
-
-        /*
-          Step 6:
-            Tell the terminal that scanning is starting.
-        */
         output.log("Using saved GitLab authentication");
-        output.log(`Scanning merge request ${commandOptions.mr}...`);
+        output.log(`Scanning merge request ${commandOptions.mr} in ${projectId}...`);
 
         /*
-          Flow 2:
-            Legacy secret scanner test support.
-
-          Why this exists:
-            scanCommandSecretScanner.test.js expects:
-              fetchMergeRequestDiff(mrId, projectId, token)
-              scanMergeRequestDiff(diff)
-
-          In Jest, mocked functions usually have:
-              _isMockFunction === true
-
-          This block only runs in tests when those functions are mocked.
-          In real CLI usage, the command continues to the new hybrid scanner.
-        */
-        if (
-          fetchMergeRequestDiff &&
-          fetchMergeRequestDiff._isMockFunction &&
-          scanMergeRequestDiff &&
-          scanMergeRequestDiff._isMockFunction
-        ) {
-          try {
-            const diffResult = await fetchMergeRequestDiff(
-              projectId,
-              commandOptions.mr,
-              token
-            );
-
-            const secretScanResult = scanMergeRequestDiff(diffResult);
-
-            if (!secretScanResult.success) {
-              output.error("Secret scan failed.");
-              process.exitCode = 1;
-              return;
-            }
-
-            if (secretScanResult.issues.length === 0) {
-              output.log("No security issues found.");
-              process.exitCode = 0;
-              return;
-            }
-
-            const report = formatSecurityReport(secretScanResult.issues);
-            output.log(report);
-
-            process.exitCode = 0;
-            return;
-          } catch (error) {
-            output.error("Scan failed:", error.message);
-            process.exitCode = 1;
-            return;
-          }
-        }
-
-        /*
-          Flow 3:
-            New Story 6.7 hybrid scanner.
-
           runHybridScan handles:
-            1. Fetch GitLab MR diff.
+            1. Fetch GitLab MR diff (throws if GitLab returns an error).
             2. Split diff into file chunks.
             3. Run local scanner first.
             4. Create safe abstract findings.
@@ -230,42 +119,38 @@ function createCli(options = {}) {
 
         output.log(scanResult.report);
 
-        if (commandOptions.markdown) {
+        if (commandOptions.markdown || commandOptions.comment) {
           const markdown = createMarkdownReport({
             ...scanResult,
             mrId: commandOptions.mr,
           });
 
-          const outputPath = commandOptions.output || "secure-review-report.md";
-          saveMarkdownReport(markdown, outputPath);
+          if (commandOptions.markdown) {
+            const outputPath = commandOptions.output || "secure-review-report.md";
+            saveMarkdownReport(markdown, outputPath);
 
-          output.log(`Markdown report exported to ${outputPath}`);
-        }
-
-        if (commandOptions.comment) {
-          const markdown = createMarkdownReport({
-            ...scanResult,
-            mrId: commandOptions.mr,
-          });
-
-          const commentResult = await postMergeRequestComment(
-            projectId,
-            commandOptions.mr,
-            token,
-            markdown
-          );
-
-          if (!commentResult.success) {
-            output.error(commentResult.message);
-            process.exitCode = 1;
-            return;
+            output.log(`Markdown report exported to ${outputPath}`);
           }
 
-          output.log(commentResult.message);
+          if (commandOptions.comment) {
+            const commentResult = await commentService.postMergeRequestComment(
+              projectId,
+              commandOptions.mr,
+              token,
+              markdown
+            );
+
+            if (!commentResult.success) {
+              output.error(`Error: ${commentResult.message}`);
+              process.exitCode = 1;
+              return;
+            }
+
+            output.log(commentResult.message);
+          }
         }
 
         process.exitCode = 0;
-        return;
       } catch (error) {
         /*
           Final safety catch:

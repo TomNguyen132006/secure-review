@@ -37,6 +37,7 @@ function scanSecurityPatterns(codeDiff) {
   let currentFileName = null;
 
   const weakPasswords = [
+    "admin",
     "admin123",
     "password",
     "123456",

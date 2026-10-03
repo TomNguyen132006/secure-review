@@ -1,143 +1,205 @@
 const { createCli } = require("../bin/secure-review");
+const { runHybridScan } = require("../services/hybridScannerService");
 
-jest.mock("../services/gitlabMergeRequestService", () => ({
-  fetchMergeRequestDiff: jest.fn(),
-}));
+/*
+  End-to-end scan tests through the CLI.
+  The real hybrid scanner is injected; only fetch (GitLab) is mocked, and
+  GEMINI_API_KEY is unset so the local fallback explanations are used.
+*/
+const TOKEN = "glpat-xxxxxxxxxxxxxxxxxxxx";
 
-jest.mock("../security/secretScanner", () => ({
-  scanMergeRequestDiff: jest.fn(),
-}));
-
-const { fetchMergeRequestDiff } = require("../services/gitlabMergeRequestService");
-const { scanMergeRequestDiff } = require("../security/secretScanner");
+function gitlabChangesResponse(changes) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ changes }),
+  };
+}
 
 describe("scan command secret scanner", () => {
   let consoleLogSpy;
   let consoleErrorSpy;
+  let consoleWarnSpy;
+  let hybridScannerService;
+  let originalGeminiKey;
+
+  function buildCli() {
+    return createCli({
+      authService: { getGitLabToken: jest.fn(() => TOKEN) },
+      hybridScannerService,
+      console,
+    });
+  }
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.exitCode = 0;
 
+    originalGeminiKey = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+
+    global.fetch = jest.fn();
+    hybridScannerService = { runHybridScan: jest.fn(runHybridScan) };
+
     consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    consoleWarnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+    process.exitCode = undefined;
+
+    if (originalGeminiKey !== undefined) {
+      process.env.GEMINI_API_KEY = originalGeminiKey;
+    }
   });
 
   test("runs secret scanner when scanning a merge request", async () => {
-    const fakeAuthService = {
-      getGitLabToken: jest.fn(() => "fake-token"),
-    };
-
-    const fakeDiff = {
-      changes: [
+    fetch.mockResolvedValue(
+      gitlabChangesResponse([
         {
           new_path: "src/AuthService.java",
-          diff: '+String api_key = "abc123";',
+          old_path: "src/AuthService.java",
+          diff: '@@ -0,0 +1,1 @@\n+String api_key = "abc123";\n',
         },
-      ],
-    };
+      ])
+    );
 
-    fetchMergeRequestDiff.mockResolvedValue(fakeDiff);
-
-    scanMergeRequestDiff.mockReturnValue({
-      success: true,
-      issues: [
-        {
-          file: "src/AuthService.java",
-          line: 1,
-          issueType: "Hardcoded API Key",
-          riskLevel: "HIGH",
-          explanation: "API key is stored directly in source code.",
-          suggestedFix: "Move the secret to environment variables or Google Secret Manager.",
-        },
-      ],
-    });
-
-    const program = createCli({
-      authService: fakeAuthService,
-      console,
-    });
-
-    await program.parseAsync(
+    await buildCli().parseAsync(
       ["node", "secure-review", "scan", "--project", "123", "--mr", "7"],
       { from: "node" }
     );
 
-    expect(fetchMergeRequestDiff).toHaveBeenCalledWith("123", "7", "fake-token");
-    expect(scanMergeRequestDiff).toHaveBeenCalledWith(fakeDiff);
+    expect(hybridScannerService.runHybridScan).toHaveBeenCalledWith({
+      projectId: "123",
+      mrId: "7",
+      token: TOKEN,
+    });
 
+    expect(fetch).toHaveBeenCalledWith(
+      "https://gitlab.com/api/v4/projects/123/merge_requests/7/changes",
+      expect.objectContaining({
+        headers: { "PRIVATE-TOKEN": TOKEN },
+      })
+    );
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(expect.stringContaining("High"));
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining("HIGH")
+      expect.stringContaining("Hardcoded API Key")
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining("src/AuthService.java")
+    );
+    expect(process.exitCode).toBe(0);
+  });
+
+  test("reports the real file name and new-file line number", async () => {
+    fetch.mockResolvedValue(
+      gitlabChangesResponse([
+        {
+          new_path: "src/config.js",
+          old_path: "src/config.js",
+          diff:
+            "@@ -10,3 +10,4 @@ module.exports = {\n" +
+            "   host: \"localhost\",\n" +
+            "-  port: 5432,\n" +
+            "+  port: 5433,\n" +
+            "+  password = \"hunter2-secret\",\n" +
+            "   user: \"app\",\n",
+        },
+      ])
+    );
+
+    await buildCli().parseAsync(
+      ["node", "secure-review", "scan", "--project", "123", "--mr", "7"],
+      { from: "node" }
+    );
+
+    const report = consoleLogSpy.mock.calls.map((call) => call[0]).join("\n");
+
+    expect(report).toContain("Hardcoded Password");
+    expect(report).toMatch(/File\s+: src\/config\.js/);
+    expect(report).toMatch(/Line\s+: 12/);
+  });
+
+  test("does not report secrets on lines the MR removes", async () => {
+    fetch.mockResolvedValue(
+      gitlabChangesResponse([
+        {
+          new_path: "src/config.js",
+          old_path: "src/config.js",
+          diff:
+            "@@ -1,2 +1,2 @@\n" +
+            "-const password = \"old-hardcoded-secret\";\n" +
+            "+const password = process.env.DB_PASSWORD;\n" +
+            " module.exports = { password };\n",
+        },
+      ])
+    );
+
+    await buildCli().parseAsync(
+      ["node", "secure-review", "scan", "--project", "123", "--mr", "7"],
+      { from: "node" }
     );
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      expect.stringContaining("src/AuthService.java")
+      expect.stringContaining("No security issues found.")
     );
   });
 
   test("prints no issues found message when scanner finds no secrets", async () => {
-    const fakeAuthService = {
-      getGitLabToken: jest.fn(() => "fake-token"),
-    };
-
-    const fakeDiff = {
-      changes: [
+    fetch.mockResolvedValue(
+      gitlabChangesResponse([
         {
           new_path: "src/App.java",
-          diff: '+console.log("hello");',
+          old_path: "src/App.java",
+          diff: '@@ -0,0 +1,1 @@\n+console.log("hello");\n',
         },
-      ],
-    };
+      ])
+    );
 
-    fetchMergeRequestDiff.mockResolvedValue(fakeDiff);
-
-    scanMergeRequestDiff.mockReturnValue({
-      success: true,
-      issues: [],
-    });
-
-    const program = createCli({
-      authService: fakeAuthService,
-      console,
-    });
-
-    await program.parseAsync(
+    await buildCli().parseAsync(
       ["node", "secure-review", "scan", "--project", "123", "--mr", "7"],
       { from: "node" }
     );
 
-    expect(fetchMergeRequestDiff).toHaveBeenCalledWith("123", "7", "fake-token");
-    expect(scanMergeRequestDiff).toHaveBeenCalledWith(fakeDiff);
-    expect(consoleLogSpy).toHaveBeenCalledWith("No security issues found.");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining("No security issues found.")
+    );
+    expect(process.exitCode).toBe(0);
   });
 
-  test("does not crash when scan fails", async () => {
-    const fakeAuthService = {
-      getGitLabToken: jest.fn(() => "fake-token"),
-    };
+  test("does not crash when GitLab cannot be reached", async () => {
+    fetch.mockRejectedValue(new Error("GitLab API failed"));
 
-    fetchMergeRequestDiff.mockRejectedValue(new Error("GitLab API failed"));
-
-    const program = createCli({
-      authService: fakeAuthService,
-      console,
-    });
-
-    await program.parseAsync(
+    await buildCli().parseAsync(
       ["node", "secure-review", "scan", "--project", "123", "--mr", "7"],
       { from: "node" }
     );
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      "Scan failed:",
-      "GitLab API failed"
+      "Error: Unable to fetch merge request diff."
+    );
+    expect(consoleLogSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("No security issues found.")
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
+  test("reports an expired token instead of an empty report", async () => {
+    fetch.mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+
+    await buildCli().parseAsync(
+      ["node", "secure-review", "scan", "--project", "123", "--mr", "7"],
+      { from: "node" }
     );
 
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Error: Invalid or expired GitLab token."
+    );
     expect(process.exitCode).toBe(1);
   });
 
