@@ -11,7 +11,8 @@ const {
 } = require("./localSecurityScanner");
 
 const {
-  analyzeSecurityFinding,
+  analyzeSecurityFindingWithStatus,
+  buildFallbackFinding,
 } = require("./geminiAnalysisService");
 
 const {
@@ -158,7 +159,18 @@ function buildNewFileLineMap(chunkText) {
     5. Create a readable terminal report.
 */
 async function runHybridScan(options) {
-  const { projectId, mrId, token } = options || {};
+  const {
+    projectId,
+    mrId,
+    token,
+    onWarning = (message) => console.warn(message),
+  } = options || {};
+
+  const warnings = [];
+  // Set after the first Gemini failure. The rest of the scan then uses local
+  // explanations directly, so the warning prints once and a bad key/model
+  // does not cost one timeout per finding.
+  let aiSkippedReason = null;
 
   const diffResult = await fetchMergeRequestDiff(projectId, mrId, token);
 
@@ -197,7 +209,21 @@ async function runHybridScan(options) {
         chunk
       );
 
-      const analyzedFinding = await analyzeSecurityFinding(findingWithFileName);
+      if (aiSkippedReason) {
+        analyzedFindings.push(buildFallbackFinding(findingWithFileName));
+        continue;
+      }
+
+      const { finding: analyzedFinding, skippedReason } =
+        await analyzeSecurityFindingWithStatus(findingWithFileName);
+
+      if (skippedReason) {
+        aiSkippedReason = skippedReason;
+
+        const warning = `Warning: AI analysis skipped (${skippedReason}). Using local explanations.`;
+        warnings.push(warning);
+        onWarning(warning);
+      }
 
       analyzedFindings.push(analyzedFinding);
     }
@@ -208,6 +234,7 @@ async function runHybridScan(options) {
   return {
     report,
     findings: analyzedFindings,
+    warnings,
   };
 }
 

@@ -126,11 +126,13 @@ describe("scan command", () => {
       from: "user",
     });
 
-    expect(mockHybridScanner.runHybridScan).toHaveBeenCalledWith({
-      projectId: "group/project",
-      mrId: "123",
-      token: TOKEN,
-    });
+    expect(mockHybridScanner.runHybridScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "group/project",
+        mrId: "123",
+        token: TOKEN,
+      })
+    );
 
     expect(mockConsole.log).toHaveBeenCalledWith(SCAN_RESULT.report);
     expect(mockCommentService.postMergeRequestComment).not.toHaveBeenCalled();

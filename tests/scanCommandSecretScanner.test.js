@@ -73,11 +73,19 @@ describe("scan command secret scanner", () => {
       { from: "node" }
     );
 
-    expect(hybridScannerService.runHybridScan).toHaveBeenCalledWith({
-      projectId: "123",
-      mrId: "7",
-      token: TOKEN,
-    });
+    expect(hybridScannerService.runHybridScan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: "123",
+        mrId: "7",
+        token: TOKEN,
+      })
+    );
+
+    // No GEMINI_API_KEY: exactly one "AI analysis skipped" warning per scan.
+    expect(consoleWarnSpy).toHaveBeenCalledTimes(1);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      "Warning: AI analysis skipped (GEMINI_API_KEY is not set). Using local explanations."
+    );
 
     expect(fetch).toHaveBeenCalledWith(
       "https://gitlab.com/api/v4/projects/123/merge_requests/7/changes",

@@ -115,6 +115,8 @@ function createCli(options = {}) {
           projectId,
           mrId: commandOptions.mr,
           token,
+          onWarning: (message) =>
+            output.warn ? output.warn(message) : output.error(message),
         });
 
         output.log(scanResult.report);

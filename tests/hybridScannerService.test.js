@@ -17,7 +17,8 @@ jest.mock("../services/localSecurityScanner", () => ({
 }));
 
 jest.mock("../services/geminiAnalysisService", () => ({
-  analyzeSecurityFinding: jest.fn(),
+  analyzeSecurityFindingWithStatus: jest.fn(),
+  buildFallbackFinding: jest.fn((finding) => ({ ...finding, source: "local-fallback" })),
 }));
 
 jest.mock("../services/securityReportService", () => ({
@@ -35,7 +36,8 @@ const {
 } = require("../services/localSecurityScanner");
 
 const {
-  analyzeSecurityFinding,
+  analyzeSecurityFindingWithStatus,
+  buildFallbackFinding,
 } = require("../services/geminiAnalysisService");
 
 const {
@@ -73,13 +75,16 @@ describe("hybridScannerService", () => {
       },
     ]);
 
-    analyzeSecurityFinding.mockResolvedValue({
-      issueType: "Hardcoded API Key",
-      riskLevel: "High",
-      fileName: "app.js",
-      explanation: "Gemini explanation for hardcoded API key.",
-      suggestedFix: "Move the key into an environment variable.",
-      source: "gemini",
+    analyzeSecurityFindingWithStatus.mockResolvedValue({
+      finding: {
+        issueType: "Hardcoded API Key",
+        riskLevel: "High",
+        fileName: "app.js",
+        explanation: "Gemini explanation for hardcoded API key.",
+        suggestedFix: "Move the key into an environment variable.",
+        source: "gemini",
+      },
+      skippedReason: null,
     });
 
     createSecurityReport.mockReturnValue("Final Security Report");
@@ -93,7 +98,7 @@ describe("hybridScannerService", () => {
     expect(fetchMergeRequestDiff).toHaveBeenCalled();
     expect(splitDiffByFile).toHaveBeenCalled();
     expect(scanSecurityPatterns).toHaveBeenCalled();
-    expect(analyzeSecurityFinding).toHaveBeenCalled();
+    expect(analyzeSecurityFindingWithStatus).toHaveBeenCalled();
     expect(createSecurityReport).toHaveBeenCalled();
 
     expect(result.report).toBe("Final Security Report");
@@ -125,22 +130,33 @@ describe("hybridScannerService", () => {
       },
     ]);
 
-    analyzeSecurityFinding.mockResolvedValue({
-      issueType: "SQL Injection Risk",
-      riskLevel: "High",
-      fileName: "db.js",
-      explanation: "Unsafe SQL string concatenation was detected.",
-      suggestedFix: "Use parameterized queries.",
-      source: "local-fallback",
+    analyzeSecurityFindingWithStatus.mockResolvedValue({
+      finding: {
+        issueType: "SQL Injection Risk",
+        riskLevel: "High",
+        fileName: "db.js",
+        explanation: "Unsafe SQL string concatenation was detected.",
+        suggestedFix: "Use parameterized queries.",
+        source: "local-fallback",
+      },
+      skippedReason: "GEMINI_API_KEY is not set",
     });
 
     createSecurityReport.mockReturnValue("Fallback Security Report");
+
+    const onWarning = jest.fn();
 
     const result = await runHybridScan({
       projectId: "TomNguyen132006/secure-review",
       mrId: "123",
       token: "fake-token",
+      onWarning,
     });
+
+    expect(onWarning).toHaveBeenCalledWith(
+      "Warning: AI analysis skipped (GEMINI_API_KEY is not set). Using local explanations."
+    );
+    expect(result.warnings).toHaveLength(1);
 
     expect(createSecurityReport).toHaveBeenCalledWith([
       expect.objectContaining({
@@ -202,5 +218,68 @@ describe("hybridScannerService failures and diff helpers", () => {
       undefined,
       60,
     ]);
+  });
+});
+
+describe("hybridScannerService AI-skipped warning", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("warns once per scan and stops calling Gemini after the first failure", async () => {
+    fetchMergeRequestDiff.mockResolvedValue({ changes: [] });
+    splitDiffByFile.mockReturnValue(["chunk-1", "chunk-2"]);
+    scanSecurityPatterns.mockReturnValue([
+      { issueType: "Hardcoded Password", riskLevel: "High", lineNumber: 1 },
+      { issueType: "SQL Injection Risk", riskLevel: "High", lineNumber: 2 },
+    ]);
+    analyzeSecurityFindingWithStatus.mockImplementation(async (finding) => ({
+      finding: { ...finding, source: "local-fallback" },
+      skippedReason: "GEMINI_API_KEY is not set",
+    }));
+    createSecurityReport.mockReturnValue("Report");
+
+    const onWarning = jest.fn();
+
+    const result = await runHybridScan({
+      projectId: "group/project",
+      mrId: "1",
+      token: "glpat-xxxxxxxxxxxxxxxxxxxx",
+      onWarning,
+    });
+
+    // 2 chunks x 2 findings = 4 findings, but only one Gemini attempt and one warning.
+    expect(result.findings).toHaveLength(4);
+    expect(analyzeSecurityFindingWithStatus).toHaveBeenCalledTimes(1);
+    expect(buildFallbackFinding).toHaveBeenCalledTimes(3);
+    expect(onWarning).toHaveBeenCalledTimes(1);
+    expect(result.warnings).toEqual([
+      "Warning: AI analysis skipped (GEMINI_API_KEY is not set). Using local explanations.",
+    ]);
+  });
+
+  test("does not warn when Gemini succeeds", async () => {
+    fetchMergeRequestDiff.mockResolvedValue({ changes: [] });
+    splitDiffByFile.mockReturnValue(["chunk-1"]);
+    scanSecurityPatterns.mockReturnValue([
+      { issueType: "Hardcoded Password", riskLevel: "High", lineNumber: 1 },
+    ]);
+    analyzeSecurityFindingWithStatus.mockResolvedValue({
+      finding: { issueType: "Hardcoded Password", source: "gemini" },
+      skippedReason: null,
+    });
+    createSecurityReport.mockReturnValue("Report");
+
+    const onWarning = jest.fn();
+
+    const result = await runHybridScan({
+      projectId: "group/project",
+      mrId: "1",
+      token: "glpat-xxxxxxxxxxxxxxxxxxxx",
+      onWarning,
+    });
+
+    expect(onWarning).not.toHaveBeenCalled();
+    expect(result.warnings).toEqual([]);
   });
 });
