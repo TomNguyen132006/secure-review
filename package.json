@@ -2,9 +2,12 @@
   "name": "secure-review",
   "version": "1.0.0",
   "description": "CLI-based AI security code review tool for GitLab merge requests",
-  "main": "src/cli.js",
+  "main": "bin/secure-review.js",
   "bin": {
     "secure-review": "./bin/secure-review.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "scripts": {
     "test": "jest",
