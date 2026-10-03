@@ -5,37 +5,92 @@ Secure Review is a CLI-based AI security code review tool for GitLab merge reque
 It helps developers:
 
 * connect their GitLab account
-* scan merge request code changes
+* scan merge request code changes (or a local diff, offline)
 * detect security risks
 * generate terminal reports
 * export Markdown reports
 * post review comments back to GitLab merge requests
+* fail a CI pipeline when risky code is found
 
-How a scan works: the CLI downloads the merge request diff from GitLab, runs local
-security rules on the diff (lines the MR removes are ignored), and optionally asks
-Google Gemini to explain each finding. For each finding, Gemini only receives the issue
-type, risk level, file name, line number and a generic description, not your code.
+How a scan works: the CLI reads a diff (from a GitLab merge request or a local file),
+runs local security rules on it (lines the change removes are ignored), and optionally
+asks Google Gemini to explain each finding. For each finding, Gemini only receives the
+issue type, risk level, file name, line number and a generic description, not your code.
 Without a Gemini API key the scan still works and uses the built-in explanations.
 
-## Requirements
+## Quick start (no GitLab account needed)
 
-* Node.js 22 or newer (22 or 24 LTS recommended). Older versions are end-of-life; the CLI stops with a clear message on them.
-* A GitLab.com account and a personal access token
-* Optional: a Google Gemini API key
-
-## Install
+You need [Node.js](https://nodejs.org/) 22 or newer and Git. Works on Windows
+(PowerShell, cmd, Windows Terminal), macOS and Linux.
 
 ```bash
 git clone https://github.com/TomNguyen132006/secure-review.git
 cd secure-review
 npm ci
+npm test
+npm run demo
 ```
 
-Run the CLI with `node bin/secure-review.js ...`. To get a global `secure-review`
-command, run `npm link` once in the project folder. The examples below use
-`secure-review`; replace it with `node bin/secure-review.js` if you did not link it.
+`npm run demo` scans [`examples/vulnerable.diff`](examples/vulnerable.diff), a small
+change with three planted problems. The report starts like this:
 
-## Create a GitLab token
+```txt
+Scanning diff file examples/vulnerable.diff (offline, no GitLab login needed)...
+Warning: AI analysis skipped (GEMINI_API_KEY is not set). Using local explanations.
+
+============================================================
+Security Scan Report
+============================================================
+
+Total Findings   : 3
+High-Risk Issues : 3
+
+------------------------------------------------------------
+Finding #1 !!! HIGH RISK !!!
+------------------------------------------------------------
+Issue Type : Hardcoded Password
+Risk Level : High
+File       : src/db.js
+Line       : 4
+...
+```
+
+and continues with Finding #2 (`SQL Injection Risk`, `src/db.js` line 9) and
+Finding #3 (`Weak Authentication`, `src/auth.js` line 4). The warning is expected:
+without a Gemini key the built-in explanations are used.
+
+Try the fixed version too, which has no findings:
+
+```bash
+node bin/secure-review.js scan --diff-file examples/safe.diff
+```
+
+### Scan your own changes offline
+
+```bash
+git diff main > changes.diff
+node bin/secure-review.js scan --diff-file changes.diff
+```
+
+Any unified diff works: `git diff`, `git diff --staged`, or a GitLab merge request
+downloaded as `.diff` (add `.diff` to the MR URL). Files saved by Windows PowerShell
+(UTF-16) and files with Windows line endings are read correctly. `--markdown`,
+`--output` and `--fail-on` work with `--diff-file`; `--comment` does not, because there
+is no merge request to comment on.
+
+### After pulling: run `npm ci` once
+
+`node_modules` is no longer stored in git. When you pull this change, git removes the
+old copy from your folder, so run this once (and again whenever `package-lock.json`
+changes):
+
+```bash
+npm ci
+```
+
+## Real GitLab use
+
+### 1. Create a GitLab token
 
 1. On GitLab.com, select your avatar (upper-right) > **Edit profile**.
 2. In the left sidebar, select **Access** > **Personal access tokens**.
@@ -53,93 +108,91 @@ command, run `npm link` once in the project folder. The examples below use
 
 Treat the token like a password. Never commit it or paste it in issues or chat.
 
-## Log in
-
-Interactive (recommended; the token is not saved in your shell history):
+### 2. Log in
 
 ```bash
-secure-review gitlab login
+node bin/secure-review.js gitlab login
 ```
 
 The token is not shown while you type or paste it (nothing is echoed, not even `*`).
-Press Enter when done, or Ctrl+C to cancel. This works in Windows Terminal,
-PowerShell, cmd and macOS/Linux terminals. Git Bash (mintty) on Windows cannot hide
-input; the CLI prints a note there. Use PowerShell, `winpty node bin/secure-review.js gitlab login`,
+Press Enter when done, or Ctrl+C to cancel. This works in Windows Terminal, PowerShell,
+cmd and macOS/Linux terminals. Git Bash (mintty) on Windows cannot hide input; the CLI
+prints a note there. Use PowerShell, `winpty node bin/secure-review.js gitlab login`,
 or `login --token` instead.
 
-You can also pipe the token in, e.g. `printenv GITLAB_TOKEN | secure-review gitlab login`.
-
-Non-interactive, for scripts and CI:
+For scripts and CI (non-interactive):
 
 ```bash
-secure-review login --token "$GITLAB_TOKEN"
+node bin/secure-review.js login --token "$GITLAB_TOKEN"
 ```
 
-Both commands check the token against the GitLab API (`GET /api/v4/user`) and then save
-the token and your GitLab username locally. An invalid or expired token is rejected and
-nothing is saved.
-
-Check or end the session:
+Both commands check the token against the GitLab API and then save the token and your
+GitLab username locally. An invalid or expired token is rejected and nothing is saved.
 
 ```bash
-secure-review gitlab status     # "GitLab connected as <username>."
-secure-review logout            # same as: secure-review gitlab logout
+node bin/secure-review.js gitlab status   # "GitLab connected as <username>."
+node bin/secure-review.js logout          # same as: gitlab logout
 ```
 
-## Scan a merge request
+### 3. Scan a merge request
 
-`--project` is the GitLab project path (`group/project`, as in the project URL) or its
-numeric project ID. `--mr` is the merge request number shown in the MR URL
-(`.../-/merge_requests/<mr>`).
+`--project` is the project path as in its URL (`group/project`) or its numeric ID.
+`--mr` is the merge request number from the MR URL (`.../-/merge_requests/<mr>`).
 
 ```bash
 # Terminal report
-secure-review scan --project my-group/my-project --mr 42
+node bin/secure-review.js scan --project my-group/my-project --mr 42
 
 # Also export a Markdown report (default file: secure-review-report.md)
-secure-review scan --project my-group/my-project --mr 42 --markdown
+node bin/secure-review.js scan --project my-group/my-project --mr 42 --markdown
 
 # Markdown report to a custom file
-secure-review scan --project my-group/my-project --mr 42 --markdown --output reports/mr-42.md
+node bin/secure-review.js scan --project my-group/my-project --mr 42 --markdown --output reports/mr-42.md
 
 # Post the report as a comment on the merge request (token needs the api scope)
-secure-review scan --project my-group/my-project --mr 42 --comment
-
-# Both
-secure-review scan --project my-group/my-project --mr 42 --markdown --comment
+node bin/secure-review.js scan --project my-group/my-project --mr 42 --comment
 
 # CI gate: exit with code 2 if any finding is High or Critical
-secure-review scan --project my-group/my-project --mr 42 --fail-on high
+node bin/secure-review.js scan --project my-group/my-project --mr 42 --fail-on high
 ```
 
-`--fail-on <level>` accepts `none` (default), `low`, `medium` or `high`. A finding
-counts if its risk level is at or above the given level (`critical` findings always
-count). A finding with an unknown risk level also counts, so the gate fails closed.
-Reports and comments are still written before the CLI exits.
-
-### Exit codes
-
-| Code | Meaning |
-| --- | --- |
-| `0` | Success. With `--fail-on`, no finding reached the threshold. |
-| `1` | Error: missing/invalid option, not logged in, GitLab error, failed `--comment`, ... |
-| `2` | The scan worked, but at least one finding is at or above `--fail-on`. |
-| `130` | `gitlab login` was cancelled with Ctrl+C. |
-
-An error always wins: if the scan finds issues *and* posting the comment fails, the
-exit code is `1`.
-
 If GitLab returns an error (expired token, wrong project, MR not found), the scan stops
-with an error message and exit code 1. It never reports "No security issues found."
-for a merge request it could not read.
+with an error and exit code 1. It never reports "No security issues found." for a merge
+request it could not read.
 
-If Gemini is not configured or fails, the scan prints one line such as
+Tip: run `npm link` once in the project folder to get a global `secure-review` command,
+then use `secure-review scan ...` instead of `node bin/secure-review.js scan ...`.
+
+### 4. Optional: Gemini explanations
+
+Set `GEMINI_API_KEY` to get AI explanations for each finding. If it is not set, or
+Gemini fails, the scan prints one line such as
 
 ```txt
 Warning: AI analysis skipped (GEMINI_API_KEY is not set). Using local explanations.
 ```
 
 and continues with the built-in explanations.
+
+### `--fail-on` and exit codes
+
+`--fail-on <level>` accepts `none` (default), `low`, `medium` or `high`. A finding
+counts if its risk level is at or above the given level (`critical` findings always
+count). A finding with an unknown risk level also counts, so the gate fails closed.
+Reports and comments are still written before the CLI exits.
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success. With `--fail-on`, no finding reached the threshold. |
+| `1` | Error: missing/invalid option, not logged in, GitLab error, failed `--comment`, unreadable diff file, Node.js too old, ... |
+| `2` | The scan worked, but at least one finding is at or above `--fail-on`. |
+| `130` | `gitlab login` was cancelled with Ctrl+C. |
+
+An error always wins: if the scan finds issues *and* posting the comment fails, the
+exit code is `1`.
+
+Check the exit code: `echo $?` (bash/zsh), `$LASTEXITCODE` (PowerShell),
+`echo %ERRORLEVEL%` (cmd).
 
 ## Environment variables
 
@@ -154,7 +207,7 @@ The CLI does not read `.env` files by itself. Copy `.env.example` to `.env`, fil
 and load it in one of these ways:
 
 ```bash
-# Load .env with Node's built-in flag
+# Node's built-in flag (any OS)
 node --env-file=.env bin/secure-review.js scan --project my-group/my-project --mr 42
 
 # macOS / Linux shell
@@ -168,17 +221,21 @@ $env:GEMINI_API_KEY = "..."
 
 ### Where the login is stored
 
-By default the token and username are saved in:
-
-```txt
-~/.secure-review/config.json
-```
-
-`SECURE_REVIEW_CONFIG_PATH` and `SECURE_REVIEW_HOME` (above) move it; they are checked
-in that order. On macOS/Linux the file is created readable by your user only.
+By default the token and username are saved in `~/.secure-review/config.json`
+(`%USERPROFILE%\.secure-review\config.json` on Windows). `SECURE_REVIEW_CONFIG_PATH`
+and `SECURE_REVIEW_HOME` (above) move it; they are checked in that order. On
+macOS/Linux the file is created readable by your user only.
 
 If the config file is empty or corrupted, the CLI prints a warning and treats you as
-not logged in. Run `secure-review gitlab login` again to fix it.
+not logged in. Log in again to fix it.
+
+## Requirements
+
+* Node.js 22 or newer (22 or 24 LTS recommended). Older versions are end-of-life;
+  the CLI stops with a clear message on them.
+* Git, to clone the project.
+* For real GitLab use: a GitLab.com account and a personal access token.
+* Optional: a Google Gemini API key.
 
 ## Run the tests
 
@@ -196,6 +253,9 @@ The tests never call the real GitLab or Gemini APIs and never touch your real
 * Tests that need a config file use a temp folder via `SECURE_REVIEW_HOME` or
   `SECURE_REVIEW_CONFIG_PATH`.
 
+CI runs the tests, the demo, both example diffs and a package install check on
+Windows, macOS and Linux with Node 22 and 24 (`.github/workflows/ci.yml`).
+
 ## Project Structure
 
 ```txt
@@ -203,12 +263,14 @@ secure-review/
 ├── backend/               # Express endpoint for token validation
 ├── bin/
 │   └── secure-review.js   # CLI entry point
+├── examples/              # vulnerable.diff and safe.diff for the demo
 ├── security/              # Secret patterns and masking helpers
 ├── services/              # GitLab, Gemini, scanning and report services
 ├── tests/
-│   ├── helpers/           # Network blocking and fetch stub for tests
+│   ├── helpers/           # Network blocking, fetch stub, old-Node simulation
 │   └── *.test.js
 ├── .env.example
+├── .gitattributes         # LF line endings on every OS
 ├── package.json
 └── README.md
 ```
@@ -250,8 +312,13 @@ CTRL + C
 If port 3000 is still busy:
 
 ```bash
+# macOS / Linux
 lsof -i :3000
 kill -9 <PID>
+
+# Windows (PowerShell)
+Get-NetTCPConnection -LocalPort 3000 | Select-Object OwningProcess
+Stop-Process -Id <PID>
 ```
 
 ## Git Workflow Notes
@@ -289,10 +356,11 @@ Bad example:
 git add .
 ```
 
-Use this commit format:
+Use this commit format, `<Story N or Area> | <Name> | <message>`:
 
 ```bash
 git commit -m "Story 13 | Minh | Add markdown report export"
+git commit -m "CI | Tam | Test on Windows, macOS and Linux"
 ```
 
 For combined work:
