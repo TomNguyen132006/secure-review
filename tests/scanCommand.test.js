@@ -303,4 +303,100 @@ describe("scan command", () => {
     expect(postedBody).toBe(markdown);
     expect(process.exitCode).toBe(0);
   });
+
+  describe("--fail-on", () => {
+    const scanWithRisks = (...riskLevels) => ({
+      report: "report",
+      findings: riskLevels.map((riskLevel, index) => ({
+        issueType: `Issue ${index + 1}`,
+        riskLevel,
+      })),
+    });
+
+    async function scan(extraArgs) {
+      await buildCli().parseAsync(
+        ["scan", "--project", "group/project", "--mr", "123", ...extraArgs],
+        { from: "user" }
+      );
+    }
+
+    beforeEach(() => {
+      mockAuthService.getGitLabToken.mockReturnValue(TOKEN);
+    });
+
+    test("defaults to none: findings do not change the exit code", async () => {
+      mockHybridScanner.runHybridScan.mockResolvedValue(scanWithRisks("Critical"));
+
+      await scan([]);
+
+      expect(process.exitCode).toBe(0);
+    });
+
+    test("exits 2 when a finding is at the threshold", async () => {
+      mockHybridScanner.runHybridScan.mockResolvedValue(scanWithRisks("Low", "High"));
+
+      await scan(["--fail-on", "high"]);
+
+      expect(mockConsole.error).toHaveBeenCalledWith(
+        'Failing: 1 finding(s) at or above "high" (--fail-on high).'
+      );
+      expect(process.exitCode).toBe(2);
+    });
+
+    test("exits 2 when a finding is above the threshold (Critical vs high)", async () => {
+      mockHybridScanner.runHybridScan.mockResolvedValue(scanWithRisks("Critical"));
+
+      await scan(["--fail-on", "HIGH"]);
+
+      expect(process.exitCode).toBe(2);
+    });
+
+    test("exits 0 when every finding is below the threshold", async () => {
+      mockHybridScanner.runHybridScan.mockResolvedValue(scanWithRisks("Low", "Medium"));
+
+      await scan(["--fail-on", "high"]);
+
+      expect(process.exitCode).toBe(0);
+    });
+
+    test("exits 0 when there are no findings", async () => {
+      mockHybridScanner.runHybridScan.mockResolvedValue(scanWithRisks());
+
+      await scan(["--fail-on", "low"]);
+
+      expect(process.exitCode).toBe(0);
+    });
+
+    test("still writes the Markdown report before exiting 2", async () => {
+      mockHybridScanner.runHybridScan.mockResolvedValue(scanWithRisks("Medium"));
+      const outputPath = path.join(tempDir, "gate.md");
+
+      await scan(["--fail-on", "medium", "--markdown", "--output", outputPath]);
+
+      expect(fs.existsSync(outputPath)).toBe(true);
+      expect(process.exitCode).toBe(2);
+    });
+
+    test("an error (failed --comment) wins over findings: exit 1", async () => {
+      mockHybridScanner.runHybridScan.mockResolvedValue(scanWithRisks("High"));
+      mockCommentService.postMergeRequestComment.mockResolvedValue({
+        success: false,
+        message: "Merge request not found.",
+      });
+
+      await scan(["--fail-on", "low", "--comment"]);
+
+      expect(process.exitCode).toBe(1);
+    });
+
+    test("rejects an invalid level with exit 1 before scanning", async () => {
+      await scan(["--fail-on", "critical"]);
+
+      expect(mockConsole.error).toHaveBeenCalledWith(
+        'Error: Invalid --fail-on value "critical". Use one of: none, low, medium, high'
+      );
+      expect(mockHybridScanner.runHybridScan).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(1);
+    });
+  });
 });

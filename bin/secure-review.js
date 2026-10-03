@@ -14,6 +14,14 @@ const { validateGitLabToken } = require("../services/gitlabService");
 const { runHybridScan } = require("../services/hybridScannerService");
 
 const { askHiddenQuestion } = require("../services/promptService");
+const {
+  FAIL_ON_LEVELS,
+  isValidFailOnLevel,
+  countFindingsAtOrAbove,
+} = require("../services/severityService");
+
+// Exit codes: 0 = scan OK, 1 = error, 2 = findings at or above --fail-on.
+const EXIT_FINDINGS = 2;
 
 const {
   createMarkdownReport,
@@ -69,10 +77,23 @@ function createCli(options = {}) {
     .option("--markdown", "Export security report as Markdown")
     .option("--output <file>", "Markdown output file path")
     .option("--comment", "Post security report as a GitLab merge request comment")
+    .option(
+      "--fail-on <level>",
+      `Exit with code ${EXIT_FINDINGS} if any finding is at or above this level (${FAIL_ON_LEVELS.join(", ")})`,
+      "none"
+    )
     .action(async (commandOptions) => {
       try {
         if (!commandOptions.mr) {
           output.error("Error: Missing required option --mr <id>");
+          process.exitCode = 1;
+          return;
+        }
+
+        if (!isValidFailOnLevel(commandOptions.failOn)) {
+          output.error(
+            `Error: Invalid --fail-on value "${commandOptions.failOn}". Use one of: ${FAIL_ON_LEVELS.join(", ")}`
+          );
           process.exitCode = 1;
           return;
         }
@@ -151,6 +172,17 @@ function createCli(options = {}) {
 
             output.log(commentResult.message);
           }
+        }
+
+        const failOn = commandOptions.failOn.toLowerCase();
+        const blockingCount = countFindingsAtOrAbove(scanResult.findings, failOn);
+
+        if (blockingCount > 0) {
+          output.error(
+            `Failing: ${blockingCount} finding(s) at or above "${failOn}" (--fail-on ${failOn}).`
+          );
+          process.exitCode = EXIT_FINDINGS;
+          return;
         }
 
         process.exitCode = 0;

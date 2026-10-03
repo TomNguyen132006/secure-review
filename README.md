@@ -61,6 +61,14 @@ Interactive (recommended; the token is not saved in your shell history):
 secure-review gitlab login
 ```
 
+The token is not shown while you type or paste it (nothing is echoed, not even `*`).
+Press Enter when done, or Ctrl+C to cancel. This works in Windows Terminal,
+PowerShell, cmd and macOS/Linux terminals. Git Bash (mintty) on Windows cannot hide
+input; the CLI prints a note there. Use PowerShell, `winpty node bin/secure-review.js gitlab login`,
+or `login --token` instead.
+
+You can also pipe the token in, e.g. `printenv GITLAB_TOKEN | secure-review gitlab login`.
+
 Non-interactive, for scripts and CI:
 
 ```bash
@@ -99,7 +107,27 @@ secure-review scan --project my-group/my-project --mr 42 --comment
 
 # Both
 secure-review scan --project my-group/my-project --mr 42 --markdown --comment
+
+# CI gate: exit with code 2 if any finding is High or Critical
+secure-review scan --project my-group/my-project --mr 42 --fail-on high
 ```
+
+`--fail-on <level>` accepts `none` (default), `low`, `medium` or `high`. A finding
+counts if its risk level is at or above the given level (`critical` findings always
+count). A finding with an unknown risk level also counts, so the gate fails closed.
+Reports and comments are still written before the CLI exits.
+
+### Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success. With `--fail-on`, no finding reached the threshold. |
+| `1` | Error: missing/invalid option, not logged in, GitLab error, failed `--comment`, ... |
+| `2` | The scan worked, but at least one finding is at or above `--fail-on`. |
+| `130` | `gitlab login` was cancelled with Ctrl+C. |
+
+An error always wins: if the scan finds issues *and* posting the comment fails, the
+exit code is `1`.
 
 If GitLab returns an error (expired token, wrong project, MR not found), the scan stops
 with an error message and exit code 1. It never reports "No security issues found."

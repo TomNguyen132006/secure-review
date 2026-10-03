@@ -244,6 +244,35 @@ describe("secure-review CLI", () => {
     expect(stdout).toContain("Security Scan Report");
     expect(stdout).toContain("No security issues found.");
   });
+  test("scan --fail-on high exits with code 2 when a High finding exists", () => {
+    run(["login", "--token", TOKEN], [USER_OK]);
+
+    const mrWithPassword = {
+      urlIncludes: "/merge_requests/123/changes",
+      status: 200,
+      body: {
+        changes: [
+          {
+            old_path: "src/db.js",
+            new_path: "src/db.js",
+            diff: '@@ -0,0 +1,1 @@\n+const password = "SuperSecret123!";\n',
+          },
+        ],
+      },
+    };
+
+    const gated = run(
+      ["scan", "--project", "group/project", "--mr", "123", "--fail-on", "high"],
+      [mrWithPassword]
+    );
+    expect(gated.status).toBe(2);
+    expect(gated.stdout).toContain("Hardcoded Password");
+    expect(gated.stderr).toContain('at or above "high"');
+
+    const ungated = run(["scan", "--project", "group/project", "--mr", "123"], [mrWithPassword]);
+    expect(ungated.status).toBe(0);
+  });
+
   /*
     Story 12 - Task 12.5
     Test that scan command prints full terminal report structure.
