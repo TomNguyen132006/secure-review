@@ -8,6 +8,7 @@ const {
   isGitLabConnected,
   disconnectGitLab,
   getGitLabUsername,
+  getConfigFilePath,
 } = require("../services/gitlabAuthService");
 
 const { fetchMergeRequestDiff } = require("../services/gitlabMergeRequestService");
@@ -15,7 +16,6 @@ const { scanMergeRequestDiff } = require("../security/secretScanner");
 const { runHybridScan } = require("../services/hybridScannerService");
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const readline = require("readline");
 
@@ -400,10 +400,7 @@ function createCli(options = {}) {
   Get local config path for saved GitLab auth token.
 */
 function getConfigPath() {
-  return (
-    process.env.SECURE_REVIEW_CONFIG_PATH ||
-    path.join(os.homedir(), ".secure-review", "config.json")
-  );
+  return getConfigFilePath();
 }
 
 /*

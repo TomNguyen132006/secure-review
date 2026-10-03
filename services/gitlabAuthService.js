@@ -2,16 +2,9 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const configDir = path.join(os.homedir(), ".secure-review");
-const configPath = path.join(configDir, "config.json");
-
-function ensureConfigDirExists() {
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-}
-
 function readConfig() {
+  const configPath = getConfigFilePath();
+
   if (!fs.existsSync(configPath)) {
     return {};
   }
@@ -71,16 +64,20 @@ function isGitLabConnected() {
 }
 
 
-function getHomeDir() {
-  return process.env.SECURE_REVIEW_HOME || os.homedir();
+// Single source of truth for the config file location.
+// Env vars are read on every call so tests can change them.
+function getConfigFilePath() {
+  if (process.env.SECURE_REVIEW_CONFIG_PATH) {
+    return process.env.SECURE_REVIEW_CONFIG_PATH;
+  }
+
+  const homeDir = process.env.SECURE_REVIEW_HOME || os.homedir();
+
+  return path.join(homeDir, ".secure-review", "config.json");
 }
 
 function getConfigDir() {
-  return path.join(getHomeDir(), ".secure-review");
-}
-
-function getConfigFilePath() {
-  return path.join(getConfigDir(), "config.json");
+  return path.dirname(getConfigFilePath());
 }
 
 // Make sure the config folder and config file exist.
@@ -118,7 +115,7 @@ module.exports = {
   isGitLabConnected,
   disconnectGitLab,
   getGitLabUsername,
-  
+  getConfigFilePath,
 };
 
 /**

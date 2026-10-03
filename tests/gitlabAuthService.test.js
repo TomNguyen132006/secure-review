@@ -9,19 +9,32 @@ const {
   disconnectGitLab,
 } = require("../services/gitlabAuthService");
 
-const configDir = path.join(os.homedir(), ".secure-review");
-const configPath = path.join(configDir, "config.json");
-
 describe("GitLab Auth Service", () => {
-  beforeEach(() => {
-    // Remove config file before each test
-    if (fs.existsSync(configPath)) {
-      fs.unlinkSync(configPath);
-    }
+  let tempHome;
+  let configDir;
+  let configPath;
+  let originalConfigPathEnv;
 
-    // Remove config folder before each test
-    if (fs.existsSync(configDir)) {
-      fs.rmSync(configDir, { recursive: true, force: true });
+  beforeEach(() => {
+    // Use an isolated temp home so tests never touch the real ~/.secure-review
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "secure-review-test-"));
+    configDir = path.join(tempHome, ".secure-review");
+    configPath = path.join(configDir, "config.json");
+
+    process.env.SECURE_REVIEW_HOME = tempHome;
+
+    // SECURE_REVIEW_CONFIG_PATH takes priority, so clear it for the test
+    originalConfigPathEnv = process.env.SECURE_REVIEW_CONFIG_PATH;
+    delete process.env.SECURE_REVIEW_CONFIG_PATH;
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+
+    delete process.env.SECURE_REVIEW_HOME;
+
+    if (originalConfigPathEnv !== undefined) {
+      process.env.SECURE_REVIEW_CONFIG_PATH = originalConfigPathEnv;
     }
   });
 
