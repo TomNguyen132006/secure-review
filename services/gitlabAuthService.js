@@ -41,6 +41,7 @@ function saveGitLabToken(token, user) {
 
   config.gitlabToken = token;
   config.gitlabUsername = user.username;
+  config.loginTime = new Date().toISOString();
 
   writeConfig(config);
 
@@ -100,6 +101,7 @@ function disconnectGitLab() {
 
   delete config.gitlabToken;
   delete config.gitlabUsername;
+  delete config.loginTime;
 
   writeConfig(config);
 

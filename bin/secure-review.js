@@ -8,15 +8,13 @@ const {
   isGitLabConnected,
   disconnectGitLab,
   getGitLabUsername,
-  getConfigFilePath,
 } = require("../services/gitlabAuthService");
 
+const { validateGitLabToken } = require("../services/gitlabService");
 const { fetchMergeRequestDiff } = require("../services/gitlabMergeRequestService");
 const { scanMergeRequestDiff } = require("../security/secretScanner");
 const { runHybridScan } = require("../services/hybridScannerService");
 
-const fs = require("fs");
-const path = require("path");
 const readline = require("readline");
 
 const { formatSecurityReport } = require("../services/securityReportFormatter");
@@ -33,14 +31,17 @@ function createCli(options = {}) {
 
   const promptToken = options.promptToken || askQuestion;
   const output = options.console || console;
-  const authService =
-    options.authService || {
-      saveGitLabToken,
-      getGitLabToken,
-      isGitLabConnected,
-      disconnectGitLab,
-      getGitLabUsername,
-    };
+  // gitlabAuthService is the only module that reads/writes the config file.
+  // Tests may override individual functions.
+  const authService = {
+    saveGitLabToken,
+    getGitLabToken,
+    isGitLabConnected,
+    disconnectGitLab,
+    getGitLabUsername,
+    validateGitLabToken,
+    ...(options.authService || {}),
+  };
   const mergeRequestService = options.mergeRequestService;
   const hybridScannerService =
     options.hybridScannerService || {
@@ -92,18 +93,10 @@ function createCli(options = {}) {
             The CLI should not scan private GitLab merge requests unless
             the user has logged in.
         */
-        let token;
-
-        if (options.authService && options.authService.getGitLabToken) {
-          token = options.authService.getGitLabToken();
-        } else {
-          token = readSavedToken();
-        }
+        const token = authService.getGitLabToken();
 
         if (!token) {
-          output.error(
-            "ERROR: Please login first using secure-review login --token <token>"
-          );
+          output.error(LOGIN_FIRST_MESSAGE);
           process.exitCode = 1;
           return;
         }
@@ -284,86 +277,74 @@ function createCli(options = {}) {
     });
 
   /*
-    New command:
-      node bin/secure-review.js gitlab login
+    Command:
+      node bin/secure-review.js login --token <token>
     Purpose:
-      Ask the user to enter a GitLab token.
-      Then send that token to backend validation.
+      Non-interactive login for scripts/CI. The token is checked against
+      the GitLab API, then the token and username are saved.
   */
   program
     .command("login")
     .description("Save GitLab authentication token locally")
     .requiredOption("--token <token>", "GitLab personal access token")
-    .action((options) => {
-      if (!isValidGitLabToken(options.token)) {
-        console.error("ERROR: Invalid GitLab token");
+    .action(async (commandOptions) => {
+      const result = await loginWithToken(commandOptions.token, authService);
+
+      if (!result.success) {
+        output.error(`ERROR: ${result.message}`);
         process.exitCode = 1;
         return;
       }
 
-      saveToken(options.token);
-      console.log("Login successful");
+      output.log(`Login successful. Connected to GitLab as ${result.username}.`);
     });
 
   const gitlabCommand = program
     .command("gitlab")
     .description("GitLab account commands");
 
+  /*
+    Command:
+      node bin/secure-review.js gitlab login
+    Purpose:
+      Ask the user to enter a GitLab token, check it against the GitLab API,
+      then save the token and username.
+  */
   gitlabCommand
     .command("login")
     .description("Connect GitLab account using a personal access token")
     .action(async () => {
       const token = await promptToken("Enter GitLab token: ");
+      const result = await loginWithToken(token, authService);
 
-      if (!token || token.trim() === "") {
-        output.error("GitLab token cannot be empty.");
-        process.exitCode = 1;
-        return;
-      }
-
-      if (authService && authService.validateGitLabToken) {
-        const isValid = await authService.validateGitLabToken(token);
-
-        if (isValid) {
-          output.log("GitLab account connected successfully.");
-        } else {
-          output.error("Invalid GitLab token.");
-          process.exitCode = 1;
-        }
-
-        return;
-      }
-
-      const result = loginWithToken(
-        token,
-        "GitLab account connected successfully."
-      );
-
-      if (result.success === false) {
+      if (!result.success) {
         output.error(result.message);
         process.exitCode = 1;
         return;
       }
 
-      output.log(result.message);
+      output.log("GitLab account connected successfully.");
     });
 
   /*
   Command:
+    node bin/secure-review.js gitlab logout
     node bin/secure-review.js logout
 
   Purpose:
-    Remove saved GitLab token.
+    Remove saved GitLab token. Both commands do the same thing.
   */
+  const logoutAction = () => {
+    const result = authService.disconnectGitLab();
+
+    output.log(result.message);
+  };
 
   gitlabCommand
     .command("logout")
     .description("Disconnect your GitLab account")
-    .action(() => {
-      const result = disconnectGitLab();
+    .action(logoutAction);
 
-      console.log(result.message);
-    });
   /**
    * Task 3.5 — Minh Nguyen
    * Show whether GitLab account is connected.
@@ -372,102 +353,72 @@ function createCli(options = {}) {
     .command("status")
     .description("Show GitLab connection status")
     .action(() => {
-      if (!isGitLabConnected()) {
-        console.log("GitLab account is not connected.");
+      if (!authService.isGitLabConnected()) {
+        output.log("GitLab account is not connected.");
         return;
       }
 
-      const username = getGitLabUsername();
-      console.log(`GitLab connected as ${username}.`);
+      const username = authService.getGitLabUsername();
+      output.log(`GitLab connected as ${username}.`);
     });
 
   program
     .command("logout")
     .description("Remove saved GitLab authentication token")
-    .action(() => {
-      logout();
-      console.log("Logged out successfully");
-    });
+    .action(logoutAction);
 
   return program;
 
 
 }
 
+const LOGIN_FIRST_MESSAGE =
+  "ERROR: Please login first using: secure-review gitlab login " +
+  "(or secure-review login --token <token> in scripts)";
 
 /*
-  Task 2.3 / 2.4
-  Get local config path for saved GitLab auth token.
+  Validate a token against the GitLab API, then save token + username.
+  Shared by `login --token` and `gitlab login`.
 */
-function getConfigPath() {
-  return getConfigFilePath();
-}
-
-/*
-task 2.3
-*/
-function saveToken(token) {
-  const configPath = getConfigPath();
-  const configDir = path.dirname(configPath);
-
-  fs.mkdirSync(configDir, { recursive: true });
-
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify(
-      {
-        gitlabToken: token,
-        loginTime: new Date().toISOString(),
-      },
-      null,
-      2
-    )
-  );
-}
-
-/**
- * Task 2.4
- * Read saved GitLab token
- */
-function readSavedToken() {
-  const configPath = getConfigPath();
-
-  if (!fs.existsSync(configPath)) {
-    return null;
+async function loginWithToken(token, authService) {
+  if (!token || token.trim() === "") {
+    return {
+      success: false,
+      message: "GitLab token cannot be empty.",
+    };
   }
+
+  const trimmedToken = token.trim();
 
   try {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-    return config.gitlabToken || null;
+    const result = await authService.validateGitLabToken(trimmedToken);
+
+    if (!result || !result.success) {
+      return {
+        success: false,
+        message: (result && result.message) || "Invalid GitLab token.",
+      };
+    }
+
+    const username = result.user && result.user.username;
+
+    authService.saveGitLabToken(trimmedToken, { username });
+
+    return {
+      success: true,
+      username,
+    };
   } catch (error) {
-    return null;
+    return {
+      success: false,
+      message: `Login failed: ${error.message}`,
+    };
   }
 }
-
-/**
- * Task 2.5
- * Validate basic GitLab token format for login.
- */
-function isValidGitLabToken(token) {
-  return typeof token === "string" && token.startsWith("glpat_");
-}
-
-/**
- * Task 2.6
- */
-function logout() {
-  const configPath = getConfigPath();
-
-  if (fs.existsSync(configPath)) {
-    fs.unlinkSync(configPath);
-  }
-}
-
-
 
 if (require.main === module) {
   const program = createCli();
-  program.parse(process.argv);
+  program.parseAsync(process.argv);
 }
 
 
@@ -489,36 +440,8 @@ function askQuestion(question) {
   });
 }
 
-function loginWithToken(token, successMessage) {
-  if (!token || token.trim() === "") {
-    return {
-      success: false,
-      message: "GitLab token cannot be empty.",
-    };
-  }
-
-  if (!isValidGitLabToken(token)) {
-    return {
-      success: false,
-      message: "Invalid GitLab token.",
-    };
-  }
-
-  saveToken(token);
-
-  return {
-    success: true,
-    message: successMessage,
-  };
-}
-
 module.exports = {
   createCli,
-  getConfigPath,
-  saveToken,
-  readSavedToken,
-  isValidGitLabToken,
-  logout,
   askQuestion,
   loginWithToken,
 };

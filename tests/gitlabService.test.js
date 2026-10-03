@@ -121,6 +121,24 @@ describe("Task 3.2 - GitLab Token Validation Service", () => {
       expect(result.message).toBe("Invalid GitLab token.");
     });
 
+    test("should explain a 403 as a missing token scope", async () => {
+      fetch.mockResolvedValue({ ok: false, status: 403, json: async () => ({}) });
+
+      const result = await validateGitLabToken("glpat-xxxxxxxxxxxxxxxxxxxx");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("read_api or api scope");
+    });
+
+    test("should report other HTTP errors with their status", async () => {
+      fetch.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) });
+
+      const result = await validateGitLabToken("glpat-xxxxxxxxxxxxxxxxxxxx");
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe("GitLab token check failed (HTTP 500).");
+    });
+
     test("should handle GitLab API error", async () => {
       fetch.mockRejectedValue(new Error("Network error"));
 

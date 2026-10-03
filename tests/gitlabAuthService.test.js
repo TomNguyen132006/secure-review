@@ -49,6 +49,31 @@ describe("GitLab Auth Service", () => {
     expect(savedData.gitlabUsername).toBe("developer123");
   });
 
+  // Moved from the removed tests/authService.test.js (test case 2.3)
+  test("should store login time locally", () => {
+    saveGitLabToken("glpat-xxxxxxxxxxxxxxxxxxxx", {
+      username: "developer123",
+    });
+
+    const savedData = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+    expect(Date.parse(savedData.loginTime)).not.toBeNaN();
+  });
+
+  test("should keep unrelated config keys when saving a token", () => {
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ otherSetting: "keep-me" }));
+
+    saveGitLabToken("glpat-xxxxxxxxxxxxxxxxxxxx", {
+      username: "developer123",
+    });
+
+    const savedData = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+    expect(savedData.otherSetting).toBe("keep-me");
+    expect(savedData.gitlabUsername).toBe("developer123");
+  });
+
   test("should create config folder and file automatically if missing", () => {
     saveGitLabToken("new-token-456", {
       username: "newuser",

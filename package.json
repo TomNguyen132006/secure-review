@@ -11,6 +11,11 @@
     "start": "node bin/secure-review.js",
     "start:backend": "node backend/server.js"
   },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/tests/helpers/blockNetwork.js"
+    ]
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/TomNguyen132006/secure-review.git"

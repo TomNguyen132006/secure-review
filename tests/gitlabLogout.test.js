@@ -34,7 +34,7 @@ describe("Task 3.4 - GitLab Logout Command", () => {
       testConfigFile,
       JSON.stringify(
         {
-          gitlabToken: "fake-gitlab-token",
+          gitlabToken: "glpat-xxxxxxxxxxxxxxxxxxxx",
           gitlabUsername: "developer123",
         },
         null,
@@ -45,6 +45,32 @@ describe("Task 3.4 - GitLab Logout Command", () => {
     const program = createCli();
 
     await program.parseAsync(["node", "secure-review", "gitlab", "logout"]);
+
+    const updatedConfig = JSON.parse(fs.readFileSync(testConfigFile, "utf8"));
+
+    expect(updatedConfig.gitlabToken).toBeUndefined();
+    expect(updatedConfig.gitlabUsername).toBeUndefined();
+
+    expect(console.log).toHaveBeenCalledWith(
+      "GitLab account disconnected successfully."
+    );
+  });
+
+  test("top-level logout behaves the same as gitlab logout", async () => {
+    const configDir = path.dirname(testConfigFile);
+    fs.mkdirSync(configDir, { recursive: true });
+
+    fs.writeFileSync(
+      testConfigFile,
+      JSON.stringify({
+        gitlabToken: "glpat-xxxxxxxxxxxxxxxxxxxx",
+        gitlabUsername: "developer123",
+      })
+    );
+
+    const program = createCli();
+
+    await program.parseAsync(["node", "secure-review", "logout"]);
 
     const updatedConfig = JSON.parse(fs.readFileSync(testConfigFile, "utf8"));
 
