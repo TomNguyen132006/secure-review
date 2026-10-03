@@ -1,5 +1,15 @@
 #!/usr/bin/env node
 
+// Check the Node.js version before loading anything that needs a newer one.
+var nodeVersionError = require("../services/nodeVersion").getNodeVersionError(
+  process.versions.node
+);
+
+if (nodeVersionError) {
+  console.error(nodeVersionError);
+  process.exit(1);
+}
+
 const { Command } = require("commander");
 
 const {

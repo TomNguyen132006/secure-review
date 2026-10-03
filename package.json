@@ -7,7 +7,7 @@
     "secure-review": "./bin/secure-review.js"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "scripts": {
     "test": "jest",

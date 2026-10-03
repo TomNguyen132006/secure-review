@@ -19,7 +19,7 @@ Without a Gemini API key the scan still works and uses the built-in explanations
 
 ## Requirements
 
-* Node.js 18 or newer (the CLI uses the built-in `fetch`)
+* Node.js 22 or newer (22 or 24 LTS recommended). Older versions are end-of-life; the CLI stops with a clear message on them.
 * A GitLab.com account and a personal access token
 * Optional: a Google Gemini API key
 
@@ -154,7 +154,7 @@ The CLI does not read `.env` files by itself. Copy `.env.example` to `.env`, fil
 and load it in one of these ways:
 
 ```bash
-# Node 20.6+
+# Load .env with Node's built-in flag
 node --env-file=.env bin/secure-review.js scan --project my-group/my-project --mr 42
 
 # macOS / Linux shell
