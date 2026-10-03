@@ -8,7 +8,20 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        # 22 = minimum supported (maintenance LTS), 24 = current active LTS.
+        node: ["22", "24"]
+
+    # Same bash scripts on every OS (Git Bash on Windows runners).
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - uses: actions/checkout@v4
@@ -16,7 +29,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node }}
           cache: "npm"
 
       - name: Install dependencies
@@ -24,3 +37,41 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: npm run demo finds the planted issues
+        run: |
+          out=$(npm run demo --silent)
+          echo "$out"
+          for issue in "Hardcoded Password" "SQL Injection Risk" "Weak Authentication"; do
+            grep -q "$issue" <<< "$out" || { echo "::error::demo did not report: $issue"; exit 1; }
+          done
+
+      - name: examples/safe.diff --fail-on high exits 0
+        run: |
+          set +e
+          node bin/secure-review.js scan --diff-file examples/safe.diff --fail-on high
+          code=$?
+          set -e
+          echo "exit code: $code"
+          [ "$code" -eq 0 ] || { echo "::error::expected exit 0, got $code"; exit 1; }
+
+      - name: examples/vulnerable.diff --fail-on high exits 2
+        run: |
+          set +e
+          node bin/secure-review.js scan --diff-file examples/vulnerable.diff --fail-on high
+          code=$?
+          set -e
+          echo "exit code: $code"
+          [ "$code" -eq 2 ] || { echo "::error::expected exit 2, got $code"; exit 1; }
+
+      - name: Package installs and runs from a fresh folder
+        run: |
+          tarball="$PWD/$(npm pack --silent | tail -n 1)"
+          work="$(mktemp -d)"
+          cd "$work"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund "$tarball"
+          npx --no-install secure-review --help
+          out=$(npx --no-install secure-review scan --diff-file node_modules/secure-review/examples/vulnerable.diff)
+          echo "$out"
+          grep -q "Total Findings   : 3" <<< "$out" || { echo "::error::installed package did not find the 3 planted issues"; exit 1; }

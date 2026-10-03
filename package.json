@@ -6,6 +6,12 @@
   "bin": {
     "secure-review": "./bin/secure-review.js"
   },
+  "files": [
+    "bin/",
+    "services/",
+    "examples/",
+    ".env.example"
+  ],
   "engines": {
     "node": ">=22"
   },
