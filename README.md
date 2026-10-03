@@ -31,10 +31,16 @@ npm test
 npm run demo
 ```
 
+`npm ci` may print a warning about vulnerabilities. They are in Jest, the test tool,
+which is not part of the CLI; `npm audit --omit=dev` reports 0 for the CLI itself.
+
 `npm run demo` scans [`examples/vulnerable.diff`](examples/vulnerable.diff), a small
-change with three planted problems. The report starts like this:
+change with three planted problems. The output starts like this:
 
 ```txt
+> secure-review@1.0.0 demo
+> node bin/secure-review.js scan --diff-file examples/vulnerable.diff
+
 Scanning diff file examples/vulnerable.diff (offline, no GitLab login needed)...
 Warning: AI analysis skipped (GEMINI_API_KEY is not set). Using local explanations.
 
@@ -44,6 +50,7 @@ Security Scan Report
 
 Total Findings   : 3
 High-Risk Issues : 3
+
 
 ------------------------------------------------------------
 Finding #1 !!! HIGH RISK !!!
