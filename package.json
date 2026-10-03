@@ -11,6 +11,7 @@
   },
   "scripts": {
     "test": "jest",
+    "demo": "node bin/secure-review.js scan --diff-file examples/vulnerable.diff",
     "start": "node bin/secure-review.js",
     "start:backend": "node backend/server.js"
   },

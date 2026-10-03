@@ -150,27 +150,13 @@ function buildNewFileLineMap(chunkText) {
 }
 
 /*
-  Run the full Story 6 hybrid scanning flow.
+  Run the full Story 6 hybrid scanning flow on a GitLab merge request.
   Steps:
     1. Fetch GitLab merge request diff.
-    2. Split the diff into smaller chunks.
-    3. Run local regex scanner first.
-    4. Send each local finding to Gemini fallback analysis.
-    5. Create a readable terminal report.
+    2. Scan it with scanDiffText (below).
 */
 async function runHybridScan(options) {
-  const {
-    projectId,
-    mrId,
-    token,
-    onWarning = (message) => console.warn(message),
-  } = options || {};
-
-  const warnings = [];
-  // Set after the first Gemini failure. The rest of the scan then uses local
-  // explanations directly, so the warning prints once and a bad key/model
-  // does not cost one timeout per finding.
-  let aiSkippedReason = null;
+  const { projectId, mrId, token, onWarning } = options || {};
 
   const diffResult = await fetchMergeRequestDiff(projectId, mrId, token);
 
@@ -185,9 +171,31 @@ async function runHybridScan(options) {
     throw error;
   }
 
-  const diffText = normalizeDiffToText(diffResult);
+  return scanDiffText({
+    diffText: normalizeDiffToText(diffResult),
+    onWarning,
+  });
+}
 
-  const chunks = splitDiffByFile(diffText);
+/*
+  Scan unified diff text (from GitLab or a local --diff-file).
+  Steps:
+    1. Split the diff into per-file chunks.
+    2. Run local regex scanner first.
+    3. Send each local finding to Gemini fallback analysis.
+    4. Create a readable terminal report.
+*/
+async function scanDiffText(options) {
+  const { diffText, onWarning = (message) => console.warn(message) } = options || {};
+
+  const warnings = [];
+  // Set after the first Gemini failure. The rest of the scan then uses local
+  // explanations directly, so the warning prints once and a bad key/model
+  // does not cost one timeout per finding.
+  let aiSkippedReason = null;
+
+  // Diffs saved on Windows may use CRLF line endings.
+  const chunks = splitDiffByFile(String(diffText || "").replace(/\r\n/g, "\n"));
 
   const analyzedFindings = [];
 
@@ -240,6 +248,7 @@ async function runHybridScan(options) {
 
 module.exports = {
   runHybridScan,
+  scanDiffText,
   normalizeDiffToText,
   getChunkText,
   getChunkFileName,

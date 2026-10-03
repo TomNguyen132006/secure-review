@@ -11,7 +11,8 @@ const {
 } = require("../services/gitlabAuthService");
 
 const { validateGitLabToken } = require("../services/gitlabService");
-const { runHybridScan } = require("../services/hybridScannerService");
+const { runHybridScan, scanDiffText } = require("../services/hybridScannerService");
+const { readDiffFile } = require("../services/diffFileService");
 
 const { askHiddenQuestion } = require("../services/promptService");
 const {
@@ -50,6 +51,7 @@ function createCli(options = {}) {
   const hybridScannerService =
     options.hybridScannerService || {
       runHybridScan,
+      scanDiffText,
     };
   const commentService =
     options.commentService || {
@@ -64,16 +66,21 @@ function createCli(options = {}) {
   /*
    Command:
      node bin/secure-review.js scan --project group/project --mr 123
+     node bin/secure-review.js scan --diff-file changes.diff   (offline)
 
    Purpose:
-     Scan a GitLab merge request by ID with the hybrid scanner
-     (local rules first, then optional Gemini explanations).
+     Scan a GitLab merge request by ID, or a local unified diff, with the
+     hybrid scanner (local rules first, then optional Gemini explanations).
    */
   program
     .command("scan")
-    .description("Scan a GitLab merge request for security risks")
+    .description("Scan a GitLab merge request (or a local diff file) for security risks")
     .option("--mr <id>", "GitLab merge request ID (the number shown in the MR URL)")
     .option("--project <id>", "GitLab project ID or path, e.g. group/project")
+    .option(
+      "--diff-file <path>",
+      "Scan a local unified diff (e.g. from git diff) instead of a GitLab MR; no login needed"
+    )
     .option("--markdown", "Export security report as Markdown")
     .option("--output <file>", "Markdown output file path")
     .option("--comment", "Post security report as a GitLab merge request comment")
@@ -83,63 +90,100 @@ function createCli(options = {}) {
       "none"
     )
     .action(async (commandOptions) => {
+      const fail = (message) => {
+        output.error(message);
+        process.exitCode = 1;
+      };
+      const onWarning = (message) =>
+        output.warn ? output.warn(message) : output.error(message);
+
       try {
-        if (!commandOptions.mr) {
-          output.error("Error: Missing required option --mr <id>");
-          process.exitCode = 1;
-          return;
+        let scanResult;
+        let projectId;
+        let token;
+
+        if (commandOptions.diffFile) {
+          /*
+            Offline mode: scan a local diff. No GitLab login, project or MR.
+          */
+          if (commandOptions.mr || commandOptions.project) {
+            fail("Error: --diff-file cannot be combined with --mr or --project.");
+            return;
+          }
+
+          if (commandOptions.comment) {
+            fail(
+              "Error: --comment posts to a GitLab merge request, so it cannot be used with --diff-file. " +
+                "Use --markdown to save the report instead."
+            );
+            return;
+          }
+
+          if (!isValidFailOnLevel(commandOptions.failOn)) {
+            fail(
+              `Error: Invalid --fail-on value "${commandOptions.failOn}". Use one of: ${FAIL_ON_LEVELS.join(", ")}`
+            );
+            return;
+          }
+
+          const diffText = readDiffFile(commandOptions.diffFile);
+
+          output.log(`Scanning diff file ${commandOptions.diffFile} (offline, no GitLab login needed)...`);
+
+          scanResult = await hybridScannerService.scanDiffText({ diffText, onWarning });
+        } else {
+          if (!commandOptions.mr) {
+            fail("Error: Missing required option --mr <id> (or use --diff-file <path> to scan a local diff)");
+            return;
+          }
+
+          if (!isValidFailOnLevel(commandOptions.failOn)) {
+            fail(
+              `Error: Invalid --fail-on value "${commandOptions.failOn}". Use one of: ${FAIL_ON_LEVELS.join(", ")}`
+            );
+            return;
+          }
+
+          if (!commandOptions.project) {
+            fail(
+              "Error: Missing required option --project <id> (GitLab project ID or path, e.g. group/project)"
+            );
+            return;
+          }
+
+          /*
+            The CLI should not scan private GitLab merge requests unless
+            the user has logged in.
+          */
+          token = authService.getGitLabToken();
+
+          if (!token) {
+            fail(LOGIN_FIRST_MESSAGE);
+            return;
+          }
+
+          projectId = commandOptions.project;
+
+          output.log("Using saved GitLab authentication");
+          output.log(`Scanning merge request ${commandOptions.mr} in ${projectId}...`);
+
+          /*
+            runHybridScan handles:
+              1. Fetch GitLab MR diff (throws if GitLab returns an error).
+              2. Split diff into file chunks.
+              3. Run local scanner first.
+              4. Create safe abstract findings.
+              5. Send safe findings to Gemini.
+              6. Fall back when Gemini fails.
+              7. Create the final terminal report.
+          */
+          scanResult = await hybridScannerService.runHybridScan({
+            projectId,
+            mrId: commandOptions.mr,
+            token,
+            onWarning,
+          });
         }
-
-        if (!isValidFailOnLevel(commandOptions.failOn)) {
-          output.error(
-            `Error: Invalid --fail-on value "${commandOptions.failOn}". Use one of: ${FAIL_ON_LEVELS.join(", ")}`
-          );
-          process.exitCode = 1;
-          return;
-        }
-
-        if (!commandOptions.project) {
-          output.error(
-            "Error: Missing required option --project <id> (GitLab project ID or path, e.g. group/project)"
-          );
-          process.exitCode = 1;
-          return;
-        }
-
-        /*
-          The CLI should not scan private GitLab merge requests unless
-          the user has logged in.
-        */
-        const token = authService.getGitLabToken();
-
-        if (!token) {
-          output.error(LOGIN_FIRST_MESSAGE);
-          process.exitCode = 1;
-          return;
-        }
-
-        const projectId = commandOptions.project;
-
-        output.log("Using saved GitLab authentication");
-        output.log(`Scanning merge request ${commandOptions.mr} in ${projectId}...`);
-
-        /*
-          runHybridScan handles:
-            1. Fetch GitLab MR diff (throws if GitLab returns an error).
-            2. Split diff into file chunks.
-            3. Run local scanner first.
-            4. Create safe abstract findings.
-            5. Send safe findings to Gemini.
-            6. Fall back when Gemini fails.
-            7. Create the final terminal report.
-        */
-        const scanResult = await hybridScannerService.runHybridScan({
-          projectId,
-          mrId: commandOptions.mr,
-          token,
-          onWarning: (message) =>
-            output.warn ? output.warn(message) : output.error(message),
-        });
 
         output.log(scanResult.report);
 
@@ -147,6 +191,7 @@ function createCli(options = {}) {
           const markdown = createMarkdownReport({
             ...scanResult,
             mrId: commandOptions.mr,
+            diffFile: commandOptions.diffFile,
           });
 
           if (commandOptions.markdown) {

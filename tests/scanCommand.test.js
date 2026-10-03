@@ -82,7 +82,7 @@ describe("scan command", () => {
     });
 
     expect(mockConsole.error).toHaveBeenCalledWith(
-      "Error: Missing required option --mr <id>"
+      expect.stringContaining("Error: Missing required option --mr <id>")
     );
     expect(mockHybridScanner.runHybridScan).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(1);

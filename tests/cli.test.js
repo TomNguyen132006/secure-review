@@ -273,6 +273,37 @@ describe("secure-review CLI", () => {
     expect(ungated.status).toBe(0);
   });
 
+  test("npm run demo scans examples/vulnerable.diff offline and finds the planted issues", () => {
+    // Runs the real npm script, as a user would. No login, no network:
+    // GEMINI_API_KEY is removed from baseEnv and nothing calls GitLab.
+    const result = spawnSync("npm run demo --silent", {
+      cwd: REPO_ROOT,
+      env: baseEnv,
+      encoding: "utf8",
+      shell: true,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Hardcoded Password");
+    expect(result.stdout).toContain("SQL Injection Risk");
+    expect(result.stdout).toContain("Weak Authentication");
+    expect(result.stdout).toContain("Total Findings   : 3");
+    expect(result.stderr).toContain("AI analysis skipped (GEMINI_API_KEY is not set)");
+  });
+
+  test("scan --diff-file needs no login and no network (fetch stub blocks everything)", () => {
+    const vulnerable = run(
+      ["scan", "--diff-file", "examples/vulnerable.diff", "--fail-on", "high"],
+      []
+    );
+    expect(vulnerable.status).toBe(2);
+    expect(fs.existsSync(configPath)).toBe(false);
+
+    const safe = run(["scan", "--diff-file", "examples/safe.diff", "--fail-on", "high"], []);
+    expect(safe.status).toBe(0);
+    expect(safe.stdout).toContain("No security issues found.");
+  });
+
   /*
     Story 12 - Task 12.5
     Test that scan command prints full terminal report structure.
