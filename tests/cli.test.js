@@ -36,7 +36,7 @@ describe("secure-review CLI", () => {
   let configPath;
   let baseEnv;
 
-  function run(args, routes = []) {
+  function run(args, routes = [], stdinText) {
     const result = spawnSync(
       process.execPath,
       ["-r", FETCH_STUB, "bin/secure-review.js", ...args],
@@ -44,6 +44,7 @@ describe("secure-review CLI", () => {
         cwd: REPO_ROOT,
         env: { ...baseEnv, SECURE_REVIEW_TEST_FETCH: JSON.stringify(routes) },
         encoding: "utf8",
+        input: stdinText,
       }
     );
 
@@ -107,6 +108,18 @@ describe("secure-review CLI", () => {
     expect(config.gitlabToken).toBe(TOKEN);
     expect(config.gitlabUsername).toBe("developer123");
     expect(config.loginTime).toBeDefined();
+  });
+
+  test("gitlab login reads a piped token (non-TTY) and never prints it", () => {
+    const { status, stdout, stderr } = run(["gitlab", "login"], [USER_OK], `${TOKEN}\n`);
+
+    expect(status).toBe(0);
+    expect(stdout).toContain("Enter GitLab token: ");
+    expect(stdout).toContain("GitLab account connected successfully.");
+    expect(stdout + stderr).not.toContain(TOKEN);
+
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    expect(config.gitlabToken).toBe(TOKEN);
   });
 
   test("should show username in gitlab status after login", () => {

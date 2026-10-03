@@ -106,6 +106,20 @@ describe("Task 3.1 - GitLab Login Command", () => {
     expect(mockAuthService.validateGitLabToken).toHaveBeenCalledWith(VALID_TOKEN);
   });
 
+  test("Ctrl+C at the token prompt cancels login cleanly", async () => {
+    const { program, mockPrompt, mockAuthService, mockConsole } = createMocks();
+    const cancelled = new Error("Prompt cancelled.");
+    cancelled.code = "PROMPT_CANCELLED";
+    mockPrompt.mockRejectedValue(cancelled);
+
+    await program.parseAsync(["node", "cli.js", "gitlab", "login"]);
+
+    expect(mockConsole.error).toHaveBeenCalledWith("Login cancelled.");
+    expect(mockAuthService.validateGitLabToken).not.toHaveBeenCalled();
+    expect(mockAuthService.saveGitLabToken).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(130);
+  });
+
   test("Network failure shows a clean error", async () => {
     const { program, mockAuthService, mockConsole } = createMocks({
       validation: { success: false, message: "Unable to connect to GitLab." },

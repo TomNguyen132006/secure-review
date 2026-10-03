@@ -13,7 +13,7 @@ const {
 const { validateGitLabToken } = require("../services/gitlabService");
 const { runHybridScan } = require("../services/hybridScannerService");
 
-const readline = require("readline");
+const { askHiddenQuestion } = require("../services/promptService");
 
 const {
   createMarkdownReport,
@@ -25,7 +25,8 @@ const { postMergeRequestComment } = require("../services/gitlabCommentService");
 function createCli(options = {}) {
   const program = new Command();
 
-  const promptToken = options.promptToken || askQuestion;
+  // Token input is hidden while typing (see services/promptService.js).
+  const promptToken = options.promptToken || askHiddenQuestion;
   const output = options.console || console;
   // gitlabAuthService is the only module that reads/writes the config file.
   // Tests may override individual functions.
@@ -201,7 +202,20 @@ function createCli(options = {}) {
     .command("login")
     .description("Connect GitLab account using a personal access token")
     .action(async () => {
-      const token = await promptToken("Enter GitLab token: ");
+      let token;
+
+      try {
+        token = await promptToken("Enter GitLab token: ");
+      } catch (error) {
+        if (error.code === "PROMPT_CANCELLED") {
+          output.error("Login cancelled.");
+          process.exitCode = 130;
+          return;
+        }
+
+        throw error;
+      }
+
       const result = await loginWithToken(token, authService);
 
       if (!result.success) {
@@ -310,25 +324,7 @@ if (require.main === module) {
 
 
 
-/* 
-task 3.1
-*/
-function askQuestion(question) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-}
-
 module.exports = {
   createCli,
-  askQuestion,
   loginWithToken,
 };
