@@ -128,6 +128,21 @@ describe("secure-review CLI", () => {
     expect(stderr).toContain("secure-review gitlab login");
   });
 
+  test("should treat a corrupted config as not logged in without crashing", () => {
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, "{ this is not json");
+
+    const status = run(["gitlab", "status"]);
+    expect(status.status).toBe(0);
+    expect(status.stdout).toContain("GitLab account is not connected.");
+    expect(status.stderr).toContain("is not valid JSON");
+
+    const scan = run(["scan", "--project", "group/project", "--mr", "123"]);
+    expect(scan.status).toBe(1);
+    expect(scan.stderr).toContain("Please login first");
+    expect(scan.stderr).not.toMatch(/\n\s+at /);
+  });
+
   /*
   test 2.5
   */

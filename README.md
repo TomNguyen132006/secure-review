@@ -99,6 +99,25 @@ Test Suites: passed
 Tests: passed
 ```
 
+## Where the login is stored
+
+After you log in, your GitLab token and username are saved in a local config file.
+By default it is:
+
+```txt
+~/.secure-review/config.json
+```
+
+You can move it with these environment variables (checked in this order):
+
+| Variable | Meaning |
+| --- | --- |
+| `SECURE_REVIEW_CONFIG_PATH` | Full path to the config file, e.g. `/tmp/sr/config.json`. Wins if set. |
+| `SECURE_REVIEW_HOME` | Folder used instead of your home folder. The file becomes `$SECURE_REVIEW_HOME/.secure-review/config.json`. |
+
+If the config file is empty or corrupted, the CLI prints a warning and treats you as
+not logged in. Run `secure-review gitlab login` again to fix it.
+
 ## CLI Commands
 
 Show help:

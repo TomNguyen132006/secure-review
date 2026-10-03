@@ -2,6 +2,24 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+// Config paths we already warned about, so the warning prints once per run.
+const warnedConfigPaths = new Set();
+
+function warnBadConfig(configPath, reason) {
+  if (warnedConfigPaths.has(configPath)) {
+    return;
+  }
+
+  warnedConfigPaths.add(configPath);
+
+  console.warn(
+    `Warning: config file ${configPath} ${reason}. Treating it as not logged in. ` +
+      "Run `secure-review gitlab login` to fix it."
+  );
+}
+
+// Read local config. A missing, empty, unreadable or corrupted file is
+// treated as "not logged in" instead of crashing.
 function readConfig() {
   const configPath = getConfigFilePath();
 
@@ -9,15 +27,36 @@ function readConfig() {
     return {};
   }
 
-  const fileContent = fs.readFileSync(configPath, "utf8");
+  let fileContent;
 
-  if (!fileContent) {
+  try {
+    fileContent = fs.readFileSync(configPath, "utf8");
+  } catch (error) {
+    warnBadConfig(configPath, `could not be read (${error.code || error.message})`);
     return {};
   }
 
-  return JSON.parse(fileContent);
-}
+  if (fileContent.trim() === "") {
+    warnBadConfig(configPath, "is empty");
+    return {};
+  }
 
+  let config;
+
+  try {
+    config = JSON.parse(fileContent);
+  } catch (error) {
+    warnBadConfig(configPath, "is not valid JSON");
+    return {};
+  }
+
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    warnBadConfig(configPath, "does not contain a JSON object");
+    return {};
+  }
+
+  return config;
+}
 
 
 // Write local config safely.
@@ -25,7 +64,7 @@ function writeConfig(config) {
   ensureConfigFile();
 
   const configFile = getConfigFilePath();
-  fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+  fs.writeFileSync(configFile, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 function saveGitLabToken(token, user) {
@@ -91,12 +130,20 @@ function ensureConfigFile() {
   }
 
   if (!fs.existsSync(configFile)) {
-    fs.writeFileSync(configFile, JSON.stringify({}, null, 2));
+    // The config holds the GitLab token: owner read/write only (ignored on Windows).
+    fs.writeFileSync(configFile, JSON.stringify({}, null, 2), { mode: 0o600 });
   }
 }
 
 // Disconnect GitLab account.
 function disconnectGitLab() {
+  if (!fs.existsSync(getConfigFilePath())) {
+    return {
+      success: true,
+      message: "GitLab account disconnected successfully.",
+    };
+  }
+
   const config = readConfig();
 
   delete config.gitlabToken;
