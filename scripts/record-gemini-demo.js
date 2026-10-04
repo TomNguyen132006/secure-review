@@ -16,7 +16,8 @@
        model, timestamp, and per finding the issue type, risk level, line,
        the exact (code-free) prompt that was sent, and Gemini's explanation.
 
-  Each request may take up to 30s (the CLI default is shorter). Timeouts,
+  Each request may take up to 30s (set explicitly, independent of the CLI
+  default and GEMINI_TIMEOUT_MS). Timeouts,
   network errors and HTTP 429/5xx are retried up to 2 more times (after 2s,
   then 5s), printing one line per retry. Invalid keys, rejected keys and
   unknown models are not retried.
@@ -36,7 +37,7 @@ const {
   getGeminiModel,
 } = require("../services/geminiAnalysisService");
 
-// Recording is a one-off, so allow Gemini more time than the CLI default and
+// Recording always allows Gemini 30s (whatever GEMINI_TIMEOUT_MS says) and
 // retry transient failures (timeout, network error, HTTP 429/5xx).
 const RECORDING_TIMEOUT_MS = 30000;
 const RETRY_DELAYS_MS = [2000, 5000];

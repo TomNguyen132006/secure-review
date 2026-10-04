@@ -7,7 +7,7 @@ const { createAbstractDescription } = require("./securityAbstractionService");
 const DEFAULT_MODEL = "gemini-3.8-flash";
 
 // Per-request timeout. Override with GEMINI_TIMEOUT_MS (milliseconds).
-const DEFAULT_GEMINI_TIMEOUT_MS = 10000;
+const DEFAULT_GEMINI_TIMEOUT_MS = 30000;
 const MAX_GEMINI_TIMEOUT_MS = 600000;
 
 function getGeminiModel() {

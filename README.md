@@ -210,7 +210,7 @@ Check the exit code: `echo $?` (bash/zsh), `$LASTEXITCODE` (PowerShell),
 | --- | --- | --- |
 | `GEMINI_API_KEY` | No | Google Gemini API key. Without it, scans use local explanations. |
 | `GEMINI_MODEL` | No | Gemini model to use. Default: `gemini-3.8-flash`. |
-| `GEMINI_TIMEOUT_MS` | No | How long to wait for each Gemini answer, in milliseconds. Default: `10000`. Invalid values fall back to the default. |
+| `GEMINI_TIMEOUT_MS` | No | How long to wait for each Gemini answer, in milliseconds. Default: `30000` (30 seconds). Invalid values fall back to the default. |
 | `SECURE_REVIEW_CONFIG_PATH` | No | Full path of the login config file. Wins over `SECURE_REVIEW_HOME`. |
 | `SECURE_REVIEW_HOME` | No | Folder used instead of your home folder; the config file becomes `$SECURE_REVIEW_HOME/.secure-review/config.json`. |
 

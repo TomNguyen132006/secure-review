@@ -69,9 +69,9 @@ describe("Gemini timeouts, retries and key validation", () => {
   const allLogText = () => log.mock.calls.map((call) => call.join(" ")).join("\n");
 
   describe("GEMINI_TIMEOUT_MS", () => {
-    test("CLI default stays 10s", () => {
-      expect(DEFAULT_GEMINI_TIMEOUT_MS).toBe(10000);
-      expect(getGeminiTimeoutMs()).toBe(10000);
+    test("CLI default is 30s", () => {
+      expect(DEFAULT_GEMINI_TIMEOUT_MS).toBe(30000);
+      expect(getGeminiTimeoutMs()).toBe(30000);
     });
 
     test("a whole number of milliseconds overrides the default", () => {
@@ -83,7 +83,7 @@ describe("Gemini timeouts, retries and key validation", () => {
       "invalid value %p falls back to the default",
       (value) => {
         process.env.GEMINI_TIMEOUT_MS = value;
-        expect(getGeminiTimeoutMs()).toBe(10000);
+        expect(getGeminiTimeoutMs()).toBe(30000);
       }
     );
 
