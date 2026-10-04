@@ -18,6 +18,9 @@ asks Google Gemini to explain each finding. For each finding, Gemini only receiv
 issue type, risk level, file name, line number and a generic description, not your code.
 Without a Gemini API key the scan still works and uses the built-in explanations.
 
+**Try it in your browser:** the [live demo](https://tomnguyen132006.github.io/secure-review/)
+runs the same local detection rules on code you paste. Nothing leaves the page.
+
 ## Quick start (no GitLab account needed)
 
 You need [Node.js](https://nodejs.org/) 22 or newer and Git. Works on Windows
@@ -263,6 +266,36 @@ The tests never call the real GitLab or Gemini APIs and never touch your real
 CI runs the tests, the demo, both example diffs and a package install check on
 Windows, macOS and Linux with Node 22 and 24 (`.github/workflows/ci.yml`).
 
+## Demo page (GitHub Pages)
+
+`demo/` is a static page that runs the CLI's real local detection
+(`services/localSecurityScanner.js`) in the browser. esbuild bundles it into
+`app.js`; nothing is copied by hand. The page makes no network requests
+(its Content-Security-Policy sets `connect-src 'none'`) and never calls Gemini.
+
+Preview it locally:
+
+```bash
+npm run demo:serve      # builds into _site/ and serves http://127.0.0.1:8080/
+```
+
+The "AI Review (Gemini)" panel shows **real** Gemini results recorded with the CLI's own
+code path. To (re)record them with your own key:
+
+```bash
+node scripts/record-gemini-demo.js --dry-run              # shows exactly what would be sent; no key needed
+node --env-file=.env scripts/record-gemini-demo.js        # needs GEMINI_API_KEY; writes demo/src/gemini-recordings.json
+npm test                                                  # checks the recordings match the examples
+```
+
+The script sends only the safe abstract description of each finding, never code, and saves
+only the issue type, risk level, line, the exact prompt that was sent, Gemini's explanation,
+the model and the date. It writes nothing if Gemini did not answer every finding.
+
+Deployment: `.github/workflows/pages.yml` runs the tests, builds `_site/` and deploys it on
+every push to `main` (or manually from the Actions tab). One-time setup in the GitHub repo:
+**Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
 ## Project Structure
 
 ```txt
@@ -270,7 +303,9 @@ secure-review/
 ├── backend/               # Express endpoint for token validation
 ├── bin/
 │   └── secure-review.js   # CLI entry point
-├── examples/              # vulnerable.diff and safe.diff for the demo
+├── demo/                  # GitHub Pages demo (index.html, styles.css, src/)
+├── examples/              # vulnerable.diff and safe.diff for npm run demo
+├── scripts/               # demo build, local preview, Gemini recording
 ├── security/              # Secret patterns and masking helpers
 ├── services/              # GitLab, Gemini, scanning and report services
 ├── tests/
