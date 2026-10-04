@@ -1,4 +1,65 @@
 {
   "about": "Real Gemini outputs for the built-in examples. Written only by scripts/record-gemini-demo.js; do not edit by hand.",
-  "recordings": []
+  "recordings": [
+    {
+      "exampleId": "hardcoded-api-key",
+      "codeSha256": "f9447a7c69155b9c2f4f49b85e2f15b2f7073cc1314bafb90e6be45d38cb2e3a",
+      "model": "gemini-3.5-flash-lite",
+      "recordedAt": "2026-10-04T02:51:19.656Z",
+      "findings": [
+        {
+          "issueType": "Hardcoded API Key",
+          "riskLevel": "High",
+          "lineNumber": 3,
+          "geminiInput": "You are a senior application security engineer.\n\nReview the following safe abstract security finding.\nDo not ask for raw code.\nExplain the risk clearly and provide a safe remediation.\n\nSecurity Finding:\nIssue Type: Hardcoded API Key\nRisk Level: High\nFile Name: src/paymentClient.js\nLine Number: 3\nDescription: Variable assignment of string literal to credential-named identifier.\n\nReturn a concise explanation and remediation.",
+          "explanation": "### Risk Explanation\n\nThe finding indicates that a literal string, likely an API key or secret token, is directly embedded into the source code (`src/paymentClient.js` at line 3). \n\nEmbedding credentials directly in source code creates a **High** security risk for several reasons:\n1. **Source Code Exposure:** If the repository is ever made public (accidentally or intentionally) or compromised, the credential is immediately leaked.\n2. **Access Sprawl:** Anyone with read access to the repository—including contractors, third-party dependencies, or internal developers who don't need payment system access—can view the secret.\n3. **Audit Trail Failures:** Hardcoded secrets make it difficult to rotate keys effectively or track who accessed or used the credential. \n4. **Permanent History:** Even if the key is later deleted from the file, it remains permanently embedded in the Git version control history unless actively scrubbed.\n\nIf compromised, an attacker could abuse the API key to perform unauthorized financial transactions, access sensitive payment data, or incur financial and reputational damage.\n\n---\n\n### Remediation\n\nTo remediate this issue, remove the hardcoded string and inject the credential securely at runtime using environment variables.\n\n1. **Remove the hardcoded value** from `src/paymentClient.js`:\n   ```javascript\n   // INSECURE (Remove this)\n   const apiKey = \"sk_live_abc123xyz...\";\n   ```\n\n2. **Use an environment variable** instead:\n   ```javascript\n   // SECURE\n   const apiKey = process.env.PAYMENT_API_KEY;\n   \n   if (!apiKey) {\n       throw new Error(\"CRITICAL: PAYMENT_API_KEY environment variable is not set.\");\n   }\n   ```\n\n3. **Configure your runtime environment** (e.g., your server, container orchestration platform, or CI/CD pipeline) to inject `PAYMENT_API_KEY` securely. For local development, use a `.gitignore`d `.env` file combined with a library like `dotenv`.\n\n4. **Rotate the compromised key:** Since the original key was exposed in the source code, treat it as compromised. Immediately revoke/rotate the API key in your payment provider's dashboard and generate a new one."
+        }
+      ]
+    },
+    {
+      "exampleId": "sql-injection",
+      "codeSha256": "3dee84f954ff2ee7395228809549baecfdc67a45510dd37b4934b9f2d784608c",
+      "model": "gemini-3.5-flash-lite",
+      "recordedAt": "2026-10-04T02:51:21.296Z",
+      "findings": [
+        {
+          "issueType": "SQL Injection Risk",
+          "riskLevel": "High",
+          "lineNumber": 4,
+          "geminiInput": "You are a senior application security engineer.\n\nReview the following safe abstract security finding.\nDo not ask for raw code.\nExplain the risk clearly and provide a safe remediation.\n\nSecurity Finding:\nIssue Type: SQL Injection Risk\nRisk Level: High\nFile Name: src/users.js\nLine Number: 4\nDescription: User-controlled input appears to be directly concatenated into a SQL query.\n\nReturn a concise explanation and remediation.",
+          "explanation": "### Risk Explanation\n\nThe finding indicates a **SQL Injection (SQLi) vulnerability** at `src/users.js:4`. \n\nWhen user-supplied input is directly concatenated into a SQL query string, the database engine cannot distinguish between the intended SQL command and the data provided by the user. An attacker can exploit this by inputting malicious SQL payloads (e.g., `' OR '1'='1`) to manipulate the query logic. This can lead to severe security impacts, including unauthorized data access, data modification or deletion, and potentially complete compromise of the underlying database server.\n\n---\n\n### Safe Remediation\n\nTo eliminate the risk of SQL injection, you must separate the SQL code from user-supplied data. This is achieved by using **Parameterized Queries** (also known as Prepared Statements) or an established Object-Relational Mapper (ORM) / Query Builder.\n\n#### Example Remediation (Node.js / Standard Database Driver)\n\n**Insecure Pattern (Current):**\n```javascript\n// DO NOT DO THIS\nconst query = \"SELECT * FROM users WHERE username = '\" + userInput + \"'\";\ndb.query(query, ...);\n```\n\n**Secure Pattern (Remediated):**\nUse placeholders (`?` or `$1` depending on your specific database driver, such as `pg` or `mysql2`) to ensure user input is treated strictly as data, never as executable code.\n\n```javascript\n// SECURE: Using a parameterized query\nconst query = \"SELECT * FROM users WHERE username = ?\";\ndb.query(query, [userInput], (err, results) => {\n    // Handle results securely\n});\n```"
+        }
+      ]
+    },
+    {
+      "exampleId": "missing-authorization",
+      "codeSha256": "8d592864bb6a4425f13942706f4a605f44b12790d88ed34ad92ee6d57b00841f",
+      "model": "gemini-3.5-flash-lite",
+      "recordedAt": "2026-10-04T02:51:23.304Z",
+      "findings": [
+        {
+          "issueType": "Missing Authorization Check",
+          "riskLevel": "High",
+          "lineNumber": 5,
+          "geminiInput": "You are a senior application security engineer.\n\nReview the following safe abstract security finding.\nDo not ask for raw code.\nExplain the risk clearly and provide a safe remediation.\n\nSecurity Finding:\nIssue Type: Missing Authorization Check\nRisk Level: High\nFile Name: src/routes/admin.js\nLine Number: 5\nDescription: Admin route appears to be defined without role-based authorization middleware.\n\nReturn a concise explanation and remediation.",
+          "explanation": "### Risk Explanation\n\nThe finding indicates that an administrative endpoint (`src/routes/admin.js`) lacks proper role-based access control (RBAC) middleware. In a web application, authentication only verifies *who* the user is, whereas authorization verifies *what* the user is allowed to do. \n\nIf this route is exposed without authorization checks, any authenticated user—or potentially unauthenticated users, depending on global middleware configuration—could access sensitive administrative functions. This flaw can lead to severe security impacts, including unauthorized data exposure, privilege escalation, and full system compromise.\n\n### Safe Remediation\n\nTo remediate this issue, ensure that a role-verification middleware is executed prior to the route handler logic. This middleware must validate that the currently authenticated user possesses the required administrative privileges (e.g., an `admin` role).\n\n**Conceptual Example:**\n\n1. **Implement (or reuse) an authorization middleware** that inspects the user's session or token to verify their role.\n2. **Apply the middleware** directly to the admin route definition in `src/routes/admin.js`.\n\n```javascript\n// Example of securing the route using a role-checking middleware\nconst express = require('express');\nconst router = express.Router();\nconst { isAuthenticated, requireRole } = require('../middleware/auth');\n\n// Apply authentication and specific role-based authorization to the route\nrouter.use(isAuthenticated, requireRole('admin'));\n\nrouter.get('/dashboard', (req, res) => {\n    // Admin-only logic here\n    res.status(200).send(\"Welcome to the admin dashboard.\");\n});\n\nmodule.exports = router;\n```"
+        }
+      ]
+    },
+    {
+      "exampleId": "missing-validation",
+      "codeSha256": "adae7ba943d9b7478f0a5ecc2c77fe9ed0074dc6f864db31d29d2068f013dd00",
+      "model": "gemini-3.5-flash-lite",
+      "recordedAt": "2026-10-04T02:51:25.294Z",
+      "findings": [
+        {
+          "issueType": "Missing Validation",
+          "riskLevel": "Medium",
+          "lineNumber": 7,
+          "geminiInput": "You are a senior application security engineer.\n\nReview the following safe abstract security finding.\nDo not ask for raw code.\nExplain the risk clearly and provide a safe remediation.\n\nSecurity Finding:\nIssue Type: Missing Validation\nRisk Level: Medium\nFile Name: src/main/java/demo/UserController.java\nLine Number: 7\nDescription: A potentially risky security pattern was detected and summarized without raw code.\n\nReturn a concise explanation and remediation.",
+          "explanation": "### Security Risk Explanation\n\nThe finding **\"Missing Validation\"** indicates that the application is likely accepting input from an external source (such as HTTP request parameters, headers, or JSON payloads) in `UserController.java` without properly verifying its format, length, type, or range before processing it. \n\nWithout input validation, the application becomes vulnerable to various injection attacks (such as SQL injection, Cross-Site Scripting, or Command Injection), logic bypasses, and denial-of-service (DoS) conditions caused by malformed or excessively large payloads.\n\n---\n\n### Safe Remediation\n\nTo remediate this issue, implement strict, allowlist-based input validation at the entry point of your controller. \n\n1. **Use Bean Validation (JSR-380):** Annotate your request DTOs (Data Transfer Objects) with validation annotations to enforce rules automatically.\n2. **Validate Explicitly:** Ensure all primitive or String parameters passed directly to controller methods are checked against expected patterns using regular expressions or Apache Commons / Spring utility classes.\n\n#### Example Remediation Pattern:\n\n**Using DTOs with Bean Validation:**\n\n```java\n// 1. Define a validated DTO for incoming requests\npublic class UserUpdateDto {\n    @NotNull\n    @Size(min = 3, max = 50)\n    @Pattern(regexp = \"^[a-zA-Z0-9_]+$\", message = \"Invalid characters detected\")\n    private String username;\n\n    // Getters and setters\n}\n\n// 2. Apply the @Valid annotation in your Controller\n@RestController\n@RequestMapping(\"/api/users\")\npublic class UserController {\n\n    @PostMapping(\"/update\")\n    public ResponseEntity<String> updateProfile(@Valid @RequestBody UserUpdateDto requestDto) {\n        // Processing safely with validated data\n        return ResponseEntity.ok(\"Success\");\n    }\n}\n```"
+        }
+      ]
+    }
+  ]
 }
