@@ -20,11 +20,17 @@ function createMarkdownReport(scanResult = {}) {
   const mrId = formatValue(scanResult.mrId || scanResult.mergeRequestId, "Unknown");
   const findings = getFindings(scanResult);
 
+  const sourceSection = scanResult.diffFile
+    ? `## Source
+
+Diff file: ${scanResult.diffFile}`
+    : `## Merge Request
+
+MR: ${mrId}`;
+
   let markdown = `# SecureReview Security Report
 
-## Merge Request
-
-MR: ${mrId}
+${sourceSection}
 
 ## Summary
 

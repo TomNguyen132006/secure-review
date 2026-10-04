@@ -213,7 +213,7 @@ diff --git a/src/adminLogin.js b/src/adminLogin.js
   });
 
   test("should detect multiple weak default passwords", () => {
-    const weakPasswords = ["admin123", "password", "123456", "qwerty", "letmein", "welcome"];
+    const weakPasswords = ["admin", "admin123", "password", "123456", "qwerty", "letmein", "welcome"];
 
     weakPasswords.forEach((weakPassword) => {
       const codeDiff = `

@@ -11,7 +11,8 @@ const {
 } = require("./localSecurityScanner");
 
 const {
-  analyzeSecurityFinding,
+  analyzeSecurityFindingWithStatus,
+  buildFallbackFinding,
 } = require("./geminiAnalysisService");
 
 const {
@@ -79,6 +80,24 @@ function getChunkText(chunk) {
 }
 
 /*
+  Read the file name from a chunk. splitDiffByFile returns strings that start
+  with "diff --git a/<old> b/<new>", so use the new path from that header.
+*/
+function getChunkFileName(chunk) {
+  if (!chunk) {
+    return undefined;
+  }
+
+  if (typeof chunk !== "string") {
+    return chunk.fileName || chunk.newPath || chunk.oldPath;
+  }
+
+  const header = chunk.match(/^diff --git a\/.+? b\/(.+)$/m);
+
+  return header ? header[1].trim() : undefined;
+}
+
+/*
   If the local scanner does not include a file name, use the file name from the diff chunk.
 */
 function attachFileNameToFinding(finding, chunk) {
@@ -88,42 +107,131 @@ function attachFileNameToFinding(finding, chunk) {
 
   return {
     ...finding,
-    fileName:
-      finding.fileName ||
-      finding.file ||
-      chunk?.fileName ||
-      chunk?.newPath ||
-      chunk?.oldPath,
+    fileName: finding.fileName || finding.file || getChunkFileName(chunk),
   };
 }
 
 /*
-  Run the full Story 6 hybrid scanning flow.
+  Map each line of a diff chunk to its line number in the new file, using the
+  "@@ -a,b +c,d @@" hunk headers. Removed lines ("-") map to null because they
+  no longer exist in the new file. Lines outside any hunk map to undefined.
+*/
+function buildNewFileLineMap(chunkText) {
+  const lines = chunkText.split("\n");
+  const lineMap = [];
+  let newLine = null;
+
+  for (const line of lines) {
+    const hunk = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+
+    if (hunk) {
+      newLine = Number(hunk[1]);
+      lineMap.push(undefined);
+      continue;
+    }
+
+    if (newLine === null) {
+      lineMap.push(undefined);
+      continue;
+    }
+
+    if (line.startsWith("-")) {
+      lineMap.push(null);
+    } else if (line.startsWith("\\")) {
+      // "\ No newline at end of file"
+      lineMap.push(undefined);
+    } else {
+      lineMap.push(newLine);
+      newLine += 1;
+    }
+  }
+
+  return lineMap;
+}
+
+/*
+  Run the full Story 6 hybrid scanning flow on a GitLab merge request.
   Steps:
     1. Fetch GitLab merge request diff.
-    2. Split the diff into smaller chunks.
-    3. Run local regex scanner first.
-    4. Send each local finding to Gemini fallback analysis.
-    5. Create a readable terminal report.
+    2. Scan it with scanDiffText (below).
 */
 async function runHybridScan(options) {
-  const { projectId, mrId, token } = options || {};
+  const { projectId, mrId, token, onWarning } = options || {};
 
   const diffResult = await fetchMergeRequestDiff(projectId, mrId, token);
-  const diffText = normalizeDiffToText(diffResult);
 
-  const chunks = splitDiffByFile(diffText);
+  // A failed fetch must not look like a clean MR with no findings.
+  if (diffResult && diffResult.success === false) {
+    const message = String(
+      diffResult.message || "Unable to fetch merge request diff."
+    ).replace(/^Error:\s*/, "");
+
+    const error = new Error(message);
+    error.status = diffResult.status;
+    throw error;
+  }
+
+  return scanDiffText({
+    diffText: normalizeDiffToText(diffResult),
+    onWarning,
+  });
+}
+
+/*
+  Scan unified diff text (from GitLab or a local --diff-file).
+  Steps:
+    1. Split the diff into per-file chunks.
+    2. Run local regex scanner first.
+    3. Send each local finding to Gemini fallback analysis.
+    4. Create a readable terminal report.
+*/
+async function scanDiffText(options) {
+  const { diffText, onWarning = (message) => console.warn(message) } = options || {};
+
+  const warnings = [];
+  // Set after the first Gemini failure. The rest of the scan then uses local
+  // explanations directly, so the warning prints once and a bad key/model
+  // does not cost one timeout per finding.
+  let aiSkippedReason = null;
+
+  // Diffs saved on Windows may use CRLF line endings.
+  const chunks = splitDiffByFile(String(diffText || "").replace(/\r\n/g, "\n"));
 
   const analyzedFindings = [];
 
   for (const chunk of chunks) {
     const chunkText = getChunkText(chunk);
     const localFindings = scanSecurityPatterns(chunkText);
+    const lineMap = buildNewFileLineMap(chunkText);
 
     for (const finding of localFindings) {
-      const findingWithFileName = attachFileNameToFinding(finding, chunk);
+      const mappedLine = lineMap[finding.lineNumber - 1];
 
-      const analyzedFinding = await analyzeSecurityFinding(findingWithFileName);
+      // Skip code the MR removes: it is not a new risk.
+      if (mappedLine === null) {
+        continue;
+      }
+
+      const findingWithFileName = attachFileNameToFinding(
+        mappedLine === undefined ? finding : { ...finding, lineNumber: mappedLine },
+        chunk
+      );
+
+      if (aiSkippedReason) {
+        analyzedFindings.push(buildFallbackFinding(findingWithFileName));
+        continue;
+      }
+
+      const { finding: analyzedFinding, skippedReason } =
+        await analyzeSecurityFindingWithStatus(findingWithFileName);
+
+      if (skippedReason) {
+        aiSkippedReason = skippedReason;
+
+        const warning = `Warning: AI analysis skipped (${skippedReason}). Using local explanations.`;
+        warnings.push(warning);
+        onWarning(warning);
+      }
 
       analyzedFindings.push(analyzedFinding);
     }
@@ -134,12 +242,16 @@ async function runHybridScan(options) {
   return {
     report,
     findings: analyzedFindings,
+    warnings,
   };
 }
 
 module.exports = {
   runHybridScan,
+  scanDiffText,
   normalizeDiffToText,
   getChunkText,
+  getChunkFileName,
   attachFileNameToFinding,
+  buildNewFileLineMap,
 };

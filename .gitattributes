@@ -1,0 +1,10 @@
+# Normalize line endings in the repository.
+* text=auto
+
+# Always check these out with LF on every OS (Windows, macOS, Linux), so
+# example diffs, scripts and docs are byte-identical everywhere.
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.diff text eol=lf
+*.yml text eol=lf

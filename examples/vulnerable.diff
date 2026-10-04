@@ -1,0 +1,33 @@
+diff --git a/src/db.js b/src/db.js
+new file mode 100644
+index 0000000..3f2a1c4
+--- /dev/null
++++ b/src/db.js
+@@ -0,0 +1,13 @@
++const mysql = require("mysql2");
++
++// Demo only: these values are fake and intentionally insecure.
++const password = "Sup3rSecret!2024";
++
++const pool = mysql.createPool({ host: "localhost", user: "app", password });
++
++function findUser(req) {
++  const query = "SELECT * FROM users WHERE id = " + req.params.id;
++  return pool.promise().query(query);
++}
++
++module.exports = { findUser };
+diff --git a/src/auth.js b/src/auth.js
+index 9b1d2e7..c4a8f90 100644
+--- a/src/auth.js
++++ b/src/auth.js
+@@ -1,6 +1,9 @@
+ const { verifyHash } = require("./hash");
+
+ function login(username, password) {
++  if (password === "admin") {
++    return true;
++  }
+   return verifyHash(username, password);
+ }
+

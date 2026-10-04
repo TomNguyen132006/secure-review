@@ -2,14 +2,29 @@
   "name": "secure-review",
   "version": "1.0.0",
   "description": "CLI-based AI security code review tool for GitLab merge requests",
-  "main": "src/cli.js",
+  "main": "bin/secure-review.js",
   "bin": {
     "secure-review": "./bin/secure-review.js"
   },
+  "files": [
+    "bin/",
+    "services/",
+    "examples/",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "jest",
+    "demo": "node bin/secure-review.js scan --diff-file examples/vulnerable.diff",
     "start": "node bin/secure-review.js",
     "start:backend": "node backend/server.js"
+  },
+  "jest": {
+    "setupFiles": [
+      "<rootDir>/tests/helpers/blockNetwork.js"
+    ]
   },
   "repository": {
     "type": "git",

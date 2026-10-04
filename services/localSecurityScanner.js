@@ -37,6 +37,7 @@ function scanSecurityPatterns(codeDiff) {
   let currentFileName = null;
 
   const weakPasswords = [
+    "admin",
     "admin123",
     "password",
     "123456",
@@ -112,6 +113,20 @@ function scanSecurityPatterns(codeDiff) {
         "Use parameterized queries or prepared statements.",
     },
     {
+      // SQL built with an interpolated template literal, e.g.
+      //   db.query(`SELECT * FROM users WHERE id = ${id}`)
+      // Tagged templates (sql`...`, prisma.$queryRaw`...`) are parameterized
+      // by their library, so a backtick right after an identifier is skipped.
+      regex:
+        /(^|[^\w$.`])`[^`]*\b(SELECT\b[^`]*\bFROM|INSERT\s+INTO|UPDATE\b[^`]*\bSET|DELETE\s+FROM)\b[^`]*\$\{[^}]+\}[^`]*`/i,
+      issueType: "SQL Injection Risk (Template Literal)",
+      riskLevel: "High",
+      explanation:
+        "The SQL query is built with a template literal that interpolates values directly into the query text.",
+      suggestedFix:
+        "Use parameterized queries (placeholders such as ? or $1 with a values array) instead of ${...} interpolation.",
+    },
+    {
       regex: /fetch\(\s*["'][^"']*(evil|steal|exfiltrate|malicious)[^"']*["']\s*\+/i,
       issueType: "Suspicious Data Exfiltration",
       riskLevel: "Critical",
@@ -155,6 +170,45 @@ function scanSecurityPatterns(codeDiff) {
         "The code uses Java-style password comparison with a hardcoded weak default password.",
       suggestedFix:
         "Do not compare passwords directly in code. Use secure password hashing and proper authentication validation.",
+    },
+    {
+      // Weak values in the comparison forms the rule above does not cover:
+      // reversed ("admin" === password) and negated (password !== "admin").
+      regex: new RegExp(
+        [
+          `(?<!\\btypeof\\s{1,10})\\bpassword\\b\\s*!==?\\s*["'](${weakPasswordGroup})["']`,
+          `["'](${weakPasswordGroup})["']\\s*(?:===?|!==?)\\s*\\bpassword\\b`,
+        ].join("|"),
+        "i"
+      ),
+      issueType: "Weak Authentication",
+      riskLevel: "High",
+      explanation:
+        "The code directly compares a password to a hardcoded weak default password.",
+      suggestedFix:
+        "Do not hardcode passwords. Store hashed passwords securely and use a proper authentication system.",
+    },
+    {
+      // Any comparison of password with a non-empty string literal, e.g.
+      //   password === "s3cr3t-value"   "s3cr3t-value" !== password
+      //   password.equals("s3cr3t-value")
+      // Weak values are excluded because the Weak Authentication rules above
+      // already report them as High. typeof checks are not comparisons with a
+      // credential. Uses the same \bpassword\b matching as the other rules.
+      regex: new RegExp(
+        [
+          `(?<!\\btypeof\\s{1,10})\\bpassword\\b\\s*(?:===?|!==?)\\s*["'](?!(?:${weakPasswordGroup})["'])[^"']+["']`,
+          `["'](?!(?:${weakPasswordGroup})["'])[^"']+["']\\s*(?:===?|!==?)\\s*\\bpassword\\b`,
+          `\\bpassword\\b\\.equals\\(\\s*["'](?!(?:${weakPasswordGroup})["'])[^"']+["']\\s*\\)`,
+        ].join("|"),
+        "i"
+      ),
+      issueType: "Hardcoded Password Comparison",
+      riskLevel: "Medium",
+      explanation:
+        "The code compares a password to a hardcoded string, so the credential lives in source code and cannot be rotated without a code change.",
+      suggestedFix:
+        "Do not compare passwords to literals. Store a salted hash (e.g. bcrypt or argon2) outside the code and verify with a constant-time comparison.",
     },
     {
       regex: new RegExp(

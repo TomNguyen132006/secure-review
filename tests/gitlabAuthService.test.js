@@ -7,21 +7,35 @@ const {
   getGitLabToken,
   isGitLabConnected,
   disconnectGitLab,
+  getConfigFilePath,
 } = require("../services/gitlabAuthService");
 
-const configDir = path.join(os.homedir(), ".secure-review");
-const configPath = path.join(configDir, "config.json");
-
 describe("GitLab Auth Service", () => {
-  beforeEach(() => {
-    // Remove config file before each test
-    if (fs.existsSync(configPath)) {
-      fs.unlinkSync(configPath);
-    }
+  let tempHome;
+  let configDir;
+  let configPath;
+  let originalConfigPathEnv;
 
-    // Remove config folder before each test
-    if (fs.existsSync(configDir)) {
-      fs.rmSync(configDir, { recursive: true, force: true });
+  beforeEach(() => {
+    // Use an isolated temp home so tests never touch the real ~/.secure-review
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "secure-review-test-"));
+    configDir = path.join(tempHome, ".secure-review");
+    configPath = path.join(configDir, "config.json");
+
+    process.env.SECURE_REVIEW_HOME = tempHome;
+
+    // SECURE_REVIEW_CONFIG_PATH takes priority, so clear it for the test
+    originalConfigPathEnv = process.env.SECURE_REVIEW_CONFIG_PATH;
+    delete process.env.SECURE_REVIEW_CONFIG_PATH;
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+
+    delete process.env.SECURE_REVIEW_HOME;
+
+    if (originalConfigPathEnv !== undefined) {
+      process.env.SECURE_REVIEW_CONFIG_PATH = originalConfigPathEnv;
     }
   });
 
@@ -33,6 +47,31 @@ describe("GitLab Auth Service", () => {
     const savedData = JSON.parse(fs.readFileSync(configPath, "utf8"));
 
     expect(savedData.gitlabToken).toBe("test-token-123");
+    expect(savedData.gitlabUsername).toBe("developer123");
+  });
+
+  // Moved from the removed tests/authService.test.js (test case 2.3)
+  test("should store login time locally", () => {
+    saveGitLabToken("glpat-xxxxxxxxxxxxxxxxxxxx", {
+      username: "developer123",
+    });
+
+    const savedData = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+    expect(Date.parse(savedData.loginTime)).not.toBeNaN();
+  });
+
+  test("should keep unrelated config keys when saving a token", () => {
+    fs.mkdirSync(configDir, { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ otherSetting: "keep-me" }));
+
+    saveGitLabToken("glpat-xxxxxxxxxxxxxxxxxxxx", {
+      username: "developer123",
+    });
+
+    const savedData = JSON.parse(fs.readFileSync(configPath, "utf8"));
+
+    expect(savedData.otherSetting).toBe("keep-me");
     expect(savedData.gitlabUsername).toBe("developer123");
   });
 
@@ -104,5 +143,120 @@ describe("GitLab Auth Service", () => {
     expect(() => {
       saveGitLabToken("valid-token", {});
     }).toThrow("GitLab username is required.");
+  });
+});
+
+describe("Config file robustness", () => {
+  let tempHome;
+  let configDir;
+  let configPath;
+  let originalConfigPathEnv;
+
+  beforeEach(() => {
+    tempHome = fs.mkdtempSync(path.join(os.tmpdir(), "secure-review-test-"));
+    configDir = path.join(tempHome, ".secure-review");
+    configPath = path.join(configDir, "config.json");
+
+    process.env.SECURE_REVIEW_HOME = tempHome;
+    originalConfigPathEnv = process.env.SECURE_REVIEW_CONFIG_PATH;
+    delete process.env.SECURE_REVIEW_CONFIG_PATH;
+
+    fs.mkdirSync(configDir, { recursive: true });
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    delete process.env.SECURE_REVIEW_HOME;
+
+    if (originalConfigPathEnv !== undefined) {
+      process.env.SECURE_REVIEW_CONFIG_PATH = originalConfigPathEnv;
+    }
+  });
+
+  test.each([
+    ["empty", ""],
+    ["whitespace only", "   \n"],
+    ["corrupted JSON", "{ gitlabToken: "],
+    ["JSON null", "null"],
+    ["JSON array", "[]"],
+  ])("treats %s config as not logged in, with a clear warning", (_label, content) => {
+    fs.writeFileSync(configPath, content);
+
+    expect(getGitLabToken()).toBe(null);
+    expect(isGitLabConnected()).toBe(false);
+
+    expect(console.warn).toHaveBeenCalledTimes(1);
+    expect(console.warn.mock.calls[0][0]).toContain(configPath);
+    expect(console.warn.mock.calls[0][0]).toContain("secure-review gitlab login");
+  });
+
+  test("logging in again repairs a corrupted config", () => {
+    fs.writeFileSync(configPath, "not json");
+
+    saveGitLabToken("glpat-xxxxxxxxxxxxxxxxxxxx", { username: "developer123" });
+
+    expect(getGitLabToken()).toBe("glpat-xxxxxxxxxxxxxxxxxxxx");
+  });
+
+  test("logout without a config file does not create one", () => {
+    fs.rmSync(configDir, { recursive: true, force: true });
+
+    const result = disconnectGitLab();
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(configPath)).toBe(false);
+  });
+});
+
+describe("getConfigFilePath", () => {
+  const saved = {};
+
+  beforeEach(() => {
+    saved.home = process.env.SECURE_REVIEW_HOME;
+    saved.path = process.env.SECURE_REVIEW_CONFIG_PATH;
+  });
+
+  afterEach(() => {
+    for (const [key, name] of [["home", "SECURE_REVIEW_HOME"], ["path", "SECURE_REVIEW_CONFIG_PATH"]]) {
+      if (saved[key] === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = saved[key];
+      }
+    }
+  });
+
+  test("SECURE_REVIEW_CONFIG_PATH wins over SECURE_REVIEW_HOME", () => {
+    const home = path.join(os.tmpdir(), "some-home");
+    const file = path.join(os.tmpdir(), "custom", "my-config.json");
+    process.env.SECURE_REVIEW_HOME = home;
+    process.env.SECURE_REVIEW_CONFIG_PATH = file;
+
+    expect(getConfigFilePath()).toBe(file);
+  });
+
+  test("SECURE_REVIEW_HOME is used when SECURE_REVIEW_CONFIG_PATH is not set", () => {
+    const home = path.join(os.tmpdir(), "some-home");
+    delete process.env.SECURE_REVIEW_CONFIG_PATH;
+    process.env.SECURE_REVIEW_HOME = home;
+
+    expect(getConfigFilePath()).toBe(path.join(home, ".secure-review", "config.json"));
+  });
+
+  test("falls back to the user's home folder and re-reads env on every call", () => {
+    delete process.env.SECURE_REVIEW_CONFIG_PATH;
+    delete process.env.SECURE_REVIEW_HOME;
+
+    expect(getConfigFilePath()).toBe(
+      path.join(os.homedir(), ".secure-review", "config.json")
+    );
+
+    process.env.SECURE_REVIEW_HOME = path.join(os.tmpdir(), "later-home");
+
+    expect(getConfigFilePath()).toBe(
+      path.join(os.tmpdir(), "later-home", ".secure-review", "config.json")
+    );
   });
 });

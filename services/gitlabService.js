@@ -14,10 +14,25 @@ async function validateGitLabToken(token) {
       },
     });
 
-    if (!response.ok) {
+    if (response.status === 401) {
       return {
         success: false,
         message: "Invalid GitLab token.",
+      };
+    }
+
+    if (response.status === 403) {
+      return {
+        success: false,
+        message:
+          "GitLab rejected the token (HTTP 403). Make sure it has the read_api or api scope.",
+      };
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        message: `GitLab token check failed (HTTP ${response.status}).`,
       };
     }
 

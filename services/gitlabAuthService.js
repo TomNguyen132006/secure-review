@@ -2,29 +2,61 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const configDir = path.join(os.homedir(), ".secure-review");
-const configPath = path.join(configDir, "config.json");
+// Config paths we already warned about, so the warning prints once per run.
+const warnedConfigPaths = new Set();
 
-function ensureConfigDirExists() {
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
+function warnBadConfig(configPath, reason) {
+  if (warnedConfigPaths.has(configPath)) {
+    return;
   }
+
+  warnedConfigPaths.add(configPath);
+
+  console.warn(
+    `Warning: config file ${configPath} ${reason}. Treating it as not logged in. ` +
+      "Run `secure-review gitlab login` to fix it."
+  );
 }
 
+// Read local config. A missing, empty, unreadable or corrupted file is
+// treated as "not logged in" instead of crashing.
 function readConfig() {
+  const configPath = getConfigFilePath();
+
   if (!fs.existsSync(configPath)) {
     return {};
   }
 
-  const fileContent = fs.readFileSync(configPath, "utf8");
+  let fileContent;
 
-  if (!fileContent) {
+  try {
+    fileContent = fs.readFileSync(configPath, "utf8");
+  } catch (error) {
+    warnBadConfig(configPath, `could not be read (${error.code || error.message})`);
     return {};
   }
 
-  return JSON.parse(fileContent);
-}
+  if (fileContent.trim() === "") {
+    warnBadConfig(configPath, "is empty");
+    return {};
+  }
 
+  let config;
+
+  try {
+    config = JSON.parse(fileContent);
+  } catch (error) {
+    warnBadConfig(configPath, "is not valid JSON");
+    return {};
+  }
+
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    warnBadConfig(configPath, "does not contain a JSON object");
+    return {};
+  }
+
+  return config;
+}
 
 
 // Write local config safely.
@@ -32,7 +64,7 @@ function writeConfig(config) {
   ensureConfigFile();
 
   const configFile = getConfigFilePath();
-  fs.writeFileSync(configFile, JSON.stringify(config, null, 2));
+  fs.writeFileSync(configFile, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 function saveGitLabToken(token, user) {
@@ -48,6 +80,7 @@ function saveGitLabToken(token, user) {
 
   config.gitlabToken = token;
   config.gitlabUsername = user.username;
+  config.loginTime = new Date().toISOString();
 
   writeConfig(config);
 
@@ -71,16 +104,20 @@ function isGitLabConnected() {
 }
 
 
-function getHomeDir() {
-  return process.env.SECURE_REVIEW_HOME || os.homedir();
+// Single source of truth for the config file location.
+// Env vars are read on every call so tests can change them.
+function getConfigFilePath() {
+  if (process.env.SECURE_REVIEW_CONFIG_PATH) {
+    return process.env.SECURE_REVIEW_CONFIG_PATH;
+  }
+
+  const homeDir = process.env.SECURE_REVIEW_HOME || os.homedir();
+
+  return path.join(homeDir, ".secure-review", "config.json");
 }
 
 function getConfigDir() {
-  return path.join(getHomeDir(), ".secure-review");
-}
-
-function getConfigFilePath() {
-  return path.join(getConfigDir(), "config.json");
+  return path.dirname(getConfigFilePath());
 }
 
 // Make sure the config folder and config file exist.
@@ -93,16 +130,25 @@ function ensureConfigFile() {
   }
 
   if (!fs.existsSync(configFile)) {
-    fs.writeFileSync(configFile, JSON.stringify({}, null, 2));
+    // The config holds the GitLab token: owner read/write only (ignored on Windows).
+    fs.writeFileSync(configFile, JSON.stringify({}, null, 2), { mode: 0o600 });
   }
 }
 
 // Disconnect GitLab account.
 function disconnectGitLab() {
+  if (!fs.existsSync(getConfigFilePath())) {
+    return {
+      success: true,
+      message: "GitLab account disconnected successfully.",
+    };
+  }
+
   const config = readConfig();
 
   delete config.gitlabToken;
   delete config.gitlabUsername;
+  delete config.loginTime;
 
   writeConfig(config);
 
@@ -118,7 +164,7 @@ module.exports = {
   isGitLabConnected,
   disconnectGitLab,
   getGitLabUsername,
-  
+  getConfigFilePath,
 };
 
 /**
