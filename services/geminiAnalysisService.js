@@ -6,10 +6,33 @@ const { createAbstractDescription } = require("./securityAbstractionService");
 // Override with the GEMINI_MODEL environment variable.
 const DEFAULT_MODEL = "gemini-3.8-flash";
 
-const GEMINI_TIMEOUT_MS = 10000;
+// Per-request timeout. Override with GEMINI_TIMEOUT_MS (milliseconds).
+const DEFAULT_GEMINI_TIMEOUT_MS = 10000;
+const MAX_GEMINI_TIMEOUT_MS = 600000;
 
 function getGeminiModel() {
   return process.env.GEMINI_MODEL || DEFAULT_MODEL;
+}
+
+// GEMINI_TIMEOUT_MS if it is a whole number of milliseconds (1..600000),
+// otherwise the default. Read on every call so it can change at runtime.
+function getGeminiTimeoutMs() {
+  const raw = String(process.env.GEMINI_TIMEOUT_MS || "").trim();
+
+  if (!/^\d+$/.test(raw)) {
+    return DEFAULT_GEMINI_TIMEOUT_MS;
+  }
+
+  const value = Number(raw);
+
+  return value >= 1 && value <= MAX_GEMINI_TIMEOUT_MS ? value : DEFAULT_GEMINI_TIMEOUT_MS;
+}
+
+// An API key is plain printable ASCII with no spaces. Anything else (smart
+// quotes, a BOM, a line break pasted into .env, ...) cannot be sent in an
+// HTTP header and would otherwise surface as a confusing "network error".
+function hasInvalidKeyCharacters(apiKey) {
+  return !/^[\x21-\x7e]+$/.test(apiKey);
 }
 
 /*
@@ -44,12 +67,26 @@ function describeGeminiHttpError(status, model) {
   The API key goes in the x-goog-api-key header, never in the URL, so it
   cannot leak into logs or error messages.
 
+  options.timeoutMs overrides GEMINI_TIMEOUT_MS / the default.
+
   Returns:
     { ok: true, text }
-    { ok: false, status?, reason }
+    { ok: false, status?, retryable, reason }
+  retryable is true only for failures that may pass on a second try
+  (timeout, network error, HTTP 429 or 5xx).
 */
-async function callGemini(prompt, apiKey) {
+async function callGemini(prompt, apiKey, options = {}) {
   const model = getGeminiModel();
+  const timeoutMs = options.timeoutMs || getGeminiTimeoutMs();
+
+  if (hasInvalidKeyCharacters(apiKey)) {
+    return {
+      ok: false,
+      retryable: false,
+      reason:
+        "GEMINI_API_KEY contains invalid characters (only plain ASCII without spaces or line breaks is allowed)",
+    };
+  }
 
   const requestBody = {
     contents: [
@@ -64,7 +101,7 @@ async function callGemini(prompt, apiKey) {
   };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   if (typeof timeout.unref === "function") {
     timeout.unref();
@@ -89,11 +126,12 @@ async function callGemini(prompt, apiKey) {
     if (error.name === "AbortError") {
       return {
         ok: false,
-        reason: `Gemini request timed out after ${GEMINI_TIMEOUT_MS / 1000}s`,
+        retryable: true,
+        reason: `Gemini request timed out after ${timeoutMs / 1000}s`,
       };
     }
 
-    return { ok: false, reason: "could not reach the Gemini API (network error)" };
+    return { ok: false, retryable: true, reason: "could not reach the Gemini API (network error)" };
   } finally {
     clearTimeout(timeout);
   }
@@ -102,6 +140,7 @@ async function callGemini(prompt, apiKey) {
     return {
       ok: false,
       status: response.status,
+      retryable: response.status === 429 || response.status >= 500,
       reason: describeGeminiHttpError(response.status, model),
     };
   }
@@ -111,13 +150,13 @@ async function callGemini(prompt, apiKey) {
   try {
     responseBody = await response.json();
   } catch (error) {
-    return { ok: false, reason: "Gemini returned a response that is not JSON" };
+    return { ok: false, retryable: false, reason: "Gemini returned a response that is not JSON" };
   }
 
   const text = extractGeminiText(responseBody);
 
   if (!text) {
-    return { ok: false, reason: "Gemini returned an unexpected response format" };
+    return { ok: false, retryable: false, reason: "Gemini returned an unexpected response format" };
   }
 
   return { ok: true, text };
@@ -176,11 +215,12 @@ function extractGeminiText(responseBody) {
   Purpose:
     Send a safe abstract description to Gemini for explanation.
 
-  Returns { finding, skippedReason }. skippedReason is set (and finding is
-  the local fallback) when Gemini was not used or failed. It never contains
-  the API key.
+  Returns { finding, skippedReason, retryable? }. skippedReason is set (and
+  finding is the local fallback) when Gemini was not used or failed; it
+  never contains the API key. retryable (only on failures) says whether a
+  second try might succeed. options.timeoutMs is passed to callGemini.
 */
-async function analyzeSecurityFindingWithStatus(finding) {
+async function analyzeSecurityFindingWithStatus(finding, options = {}) {
   const fallbackFinding = buildFallbackFinding(finding);
 
   try {
@@ -193,10 +233,14 @@ async function analyzeSecurityFindingWithStatus(finding) {
     const abstractDescription = createAbstractDescription(finding);
     const prompt = buildGeminiPrompt(abstractDescription);
 
-    const result = await callGemini(prompt, apiKey);
+    const result = await callGemini(prompt, apiKey, { timeoutMs: options.timeoutMs });
 
     if (!result.ok) {
-      return { finding: fallbackFinding, skippedReason: result.reason };
+      return {
+        finding: fallbackFinding,
+        skippedReason: result.reason,
+        retryable: result.retryable === true,
+      };
     }
 
     return {
@@ -234,6 +278,8 @@ module.exports = {
   callGemini,
   describeGeminiHttpError,
   getGeminiModel,
+  getGeminiTimeoutMs,
+  DEFAULT_GEMINI_TIMEOUT_MS,
   DEFAULT_MODEL,
   buildFallbackFinding,
   buildGeminiPrompt,

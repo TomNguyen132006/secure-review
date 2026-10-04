@@ -210,6 +210,7 @@ Check the exit code: `echo $?` (bash/zsh), `$LASTEXITCODE` (PowerShell),
 | --- | --- | --- |
 | `GEMINI_API_KEY` | No | Google Gemini API key. Without it, scans use local explanations. |
 | `GEMINI_MODEL` | No | Gemini model to use. Default: `gemini-3.8-flash`. |
+| `GEMINI_TIMEOUT_MS` | No | How long to wait for each Gemini answer, in milliseconds. Default: `10000`. Invalid values fall back to the default. |
 | `SECURE_REVIEW_CONFIG_PATH` | No | Full path of the login config file. Wins over `SECURE_REVIEW_HOME`. |
 | `SECURE_REVIEW_HOME` | No | Folder used instead of your home folder; the config file becomes `$SECURE_REVIEW_HOME/.secure-review/config.json`. |
 
@@ -290,7 +291,9 @@ npm test                                                  # checks the recording
 
 The script sends only the safe abstract description of each finding, never code, and saves
 only the issue type, risk level, line, the exact prompt that was sent, Gemini's explanation,
-the model and the date. It writes nothing if Gemini did not answer every finding.
+the model and the date. Each request may take up to 30s; timeouts, network errors and
+HTTP 429/5xx are retried up to 2 more times (after 2s, then 5s), with one line printed per
+retry. It writes nothing if Gemini did not answer every finding.
 
 Deployment: `.github/workflows/pages.yml` runs the tests, builds `_site/` and deploys it on
 every push to `main` (or manually from the Actions tab). One-time setup in the GitHub repo:

@@ -16,6 +16,11 @@
        model, timestamp, and per finding the issue type, risk level, line,
        the exact (code-free) prompt that was sent, and Gemini's explanation.
 
+  Each request may take up to 30s (the CLI default is shorter). Timeouts,
+  network errors and HTTP 429/5xx are retried up to 2 more times (after 2s,
+  then 5s), printing one line per retry. Invalid keys, rejected keys and
+  unknown models are not retried.
+
   Nothing is written if any finding was not answered by Gemini, so local
   fallback text can never be shown as "AI" output.
 */
@@ -30,6 +35,11 @@ const {
   buildGeminiPrompt,
   getGeminiModel,
 } = require("../services/geminiAnalysisService");
+
+// Recording is a one-off, so allow Gemini more time than the CLI default and
+// retry transient failures (timeout, network error, HTTP 429/5xx).
+const RECORDING_TIMEOUT_MS = 30000;
+const RETRY_DELAYS_MS = [2000, 5000];
 
 const ROOT = path.join(__dirname, "..");
 const EXAMPLES_PATH = path.join(ROOT, "demo", "src", "examples.json");
@@ -63,15 +73,49 @@ function assertNoRawCode(prompt, example) {
   }
 }
 
+const sleepFor = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isGeminiAnswer(result) {
+  return Boolean(result && !result.skippedReason && result.finding && result.finding.source === "gemini");
+}
+
+/*
+  Ask Gemini about one finding, retrying transient failures.
+  Prints one line per retry (reason only; the key is never part of it).
+*/
+async function analyzeWithRetries(finding, label, { analyze, timeoutMs, retryDelaysMs, sleep, log }) {
+  let result = await analyze(finding, { timeoutMs });
+
+  for (let attempt = 0; attempt < retryDelaysMs.length; attempt += 1) {
+    if (isGeminiAnswer(result) || !result.retryable) {
+      break;
+    }
+
+    const delay = retryDelaysMs[attempt];
+    log(
+      `Retry ${attempt + 1}/${retryDelaysMs.length} for ${label} in ${delay / 1000}s ` +
+        `(${result.skippedReason})`
+    );
+    await sleep(delay);
+    result = await analyze(finding, { timeoutMs });
+  }
+
+  return result;
+}
+
 /*
   Build the recordings object. `analyze` defaults to the real CLI function;
-  tests pass a stub so they never reach the network.
+  tests either stub it or mock fetch, so they never reach the network.
 */
 async function recordAll({
   examples = JSON.parse(fs.readFileSync(EXAMPLES_PATH, "utf8")),
   analyze = analyzeSecurityFindingWithStatus,
   model = getGeminiModel(),
   now = () => new Date().toISOString(),
+  timeoutMs = RECORDING_TIMEOUT_MS,
+  retryDelaysMs = RETRY_DELAYS_MS,
+  sleep = sleepFor,
+  log = (message) => console.log(message),
 } = {}) {
   const recordings = [];
 
@@ -82,11 +126,19 @@ async function recordAll({
       const prompt = promptFor(finding);
       assertNoRawCode(prompt, example);
 
-      const { finding: analyzed, skippedReason } = await analyze(finding);
+      const label = `${example.id} line ${finding.lineNumber}`;
+      const result = await analyzeWithRetries(finding, label, {
+        analyze,
+        timeoutMs,
+        retryDelaysMs,
+        sleep,
+        log,
+      });
+      const { finding: analyzed, skippedReason } = result;
 
-      if (skippedReason || !analyzed || analyzed.source !== "gemini") {
+      if (!isGeminiAnswer(result)) {
         throw new Error(
-          `Gemini did not answer for ${example.id} line ${finding.lineNumber}` +
+          `Gemini did not answer for ${label}` +
             (skippedReason ? `: ${skippedReason}` : "") +
             ". Nothing was written."
         );
@@ -118,8 +170,12 @@ async function recordAll({
   };
 }
 
-async function main() {
-  const dryRun = process.argv.includes("--dry-run");
+/*
+  argv/outputPath/recordOptions are parameters so tests can run the whole
+  flow against a temp file with fetch mocked.
+*/
+async function main({ argv = process.argv, outputPath = OUTPUT_PATH, recordOptions = {} } = {}) {
+  const dryRun = argv.includes("--dry-run");
   const examples = JSON.parse(fs.readFileSync(EXAMPLES_PATH, "utf8"));
 
   if (dryRun) {
@@ -146,7 +202,7 @@ async function main() {
     return;
   }
 
-  const result = await recordAll({ examples });
+  const result = await recordAll({ examples, ...recordOptions });
   const json = `${JSON.stringify(result, null, 2)}\n`;
 
   // Last safety check: the key must never end up in the file.
@@ -154,18 +210,27 @@ async function main() {
     throw new Error("Refusing to write: output contains the API key.");
   }
 
-  fs.writeFileSync(OUTPUT_PATH, json);
+  fs.writeFileSync(outputPath, json);
 
   const count = result.recordings.reduce((sum, item) => sum + item.findings.length, 0);
   console.log(
     `Recorded ${count} Gemini result(s) for ${result.recordings.length} example(s) ` +
       `with ${result.recordings[0] ? result.recordings[0].model : getGeminiModel()} -> ` +
-      path.relative(ROOT, OUTPUT_PATH)
+      path.relative(ROOT, outputPath)
   );
   console.log("Review the file, then run `npm test` and commit it.");
 }
 
-module.exports = { recordAll, promptFor, findingsFor, sha256, assertNoRawCode };
+module.exports = {
+  main,
+  recordAll,
+  promptFor,
+  findingsFor,
+  sha256,
+  assertNoRawCode,
+  RECORDING_TIMEOUT_MS,
+  RETRY_DELAYS_MS,
+};
 
 if (require.main === module) {
   main().catch((error) => {
