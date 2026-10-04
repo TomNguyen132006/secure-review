@@ -48,6 +48,18 @@ function scanSecurityPatterns(codeDiff) {
 
   const weakPasswordGroup = weakPasswords.join("|");
 
+  // What may come right before "password" so that `typeof password === "x"`
+  // is not reported as a comparison. Same result as the earlier negative
+  // lookbehind for "typeof" plus 1-10 spaces, but written without lookbehind,
+  // which Safari before 16.4 (iOS 15) cannot parse. One of:
+  //   ^                              start of the line
+  //   [^\s]                          a non-space character
+  //   \s{11}                         more than 10 spaces
+  //   ^\s+  or  [^\w\s]\s+           spaces after the line start or punctuation
+  //   (?:^|\W)(?!typeof\s)\w+\s+     spaces after a whole word that is not typeof
+  const notAfterTypeof =
+    "(?:^|[^\\s]|\\s{11}|^\\s+|[^\\w\\s]\\s+|(?:^|\\W)(?!typeof\\s)\\w+\\s+)";
+
   const securityPatterns = [
     {
       regex: /\b(api[_-]?key|apikey)\b\s*=\s*["'][^"']+["']/i,
@@ -176,7 +188,7 @@ function scanSecurityPatterns(codeDiff) {
       // reversed ("admin" === password) and negated (password !== "admin").
       regex: new RegExp(
         [
-          `(?<!\\btypeof\\s{1,10})\\bpassword\\b\\s*!==?\\s*["'](${weakPasswordGroup})["']`,
+          `${notAfterTypeof}\\bpassword\\b\\s*!==?\\s*["'](${weakPasswordGroup})["']`,
           `["'](${weakPasswordGroup})["']\\s*(?:===?|!==?)\\s*\\bpassword\\b`,
         ].join("|"),
         "i"
@@ -197,7 +209,7 @@ function scanSecurityPatterns(codeDiff) {
       // credential. Uses the same \bpassword\b matching as the other rules.
       regex: new RegExp(
         [
-          `(?<!\\btypeof\\s{1,10})\\bpassword\\b\\s*(?:===?|!==?)\\s*["'](?!(?:${weakPasswordGroup})["'])[^"']+["']`,
+          `${notAfterTypeof}\\bpassword\\b\\s*(?:===?|!==?)\\s*["'](?!(?:${weakPasswordGroup})["'])[^"']+["']`,
           `["'](?!(?:${weakPasswordGroup})["'])[^"']+["']\\s*(?:===?|!==?)\\s*\\bpassword\\b`,
           `\\bpassword\\b\\.equals\\(\\s*["'](?!(?:${weakPasswordGroup})["'])[^"']+["']\\s*\\)`,
         ].join("|"),

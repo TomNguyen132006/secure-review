@@ -261,7 +261,7 @@ describe("Gemini request safety and skip reasons", () => {
 
     const result = await analyzeSecurityFindingWithStatus(finding);
 
-    expect(result.skippedReason).toBe("Gemini request timed out after 10s");
+    expect(result.skippedReason).toBe("Gemini request timed out after 30s");
     expect(result.finding.source).toBe("local-fallback");
   });
 

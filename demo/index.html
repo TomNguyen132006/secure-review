@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Pasted code never leaves the page: no network connections are allowed
+    (connect-src 'none'), and scripts/styles may only come from this site.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; font-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>SecureReview Demo</title>
+  <meta name="description" content="Try SecureReview's local security rules in your browser. Your code never leaves the page.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <p class="eyebrow">Live demo</p>
+      <h1>SecureReview</h1>
+      <p class="lede">
+        A CLI that reviews GitLab merge requests for security risks. Try its real
+        local detection rules here. Everything runs in your browser; your code
+        never leaves this page.
+      </p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div id="compat" class="banner" role="alert" hidden>
+      <strong>This browser can't run the scanner.</strong>
+      Please update to a current browser (on iPhone/iPad: iOS 15 or newer with
+      the latest updates), or run the CLI instead (see “Run it yourself”).
+    </div>
+
+    <noscript>
+      <div class="banner">This demo needs JavaScript to run the scanner in your browser.</div>
+    </noscript>
+
+    <section id="how" aria-labelledby="how-title">
+      <h2 id="how-title">How it works</h2>
+      <ol class="flow">
+        <li class="flow-step">
+          <span class="flow-name">Your code</span>
+          <span class="flow-desc">A merge request diff or a local file</span>
+        </li>
+        <li class="flow-step">
+          <span class="flow-name">Local detection</span>
+          <span class="flow-desc">Pattern rules run on your machine</span>
+        </li>
+        <li class="flow-boundary" aria-label="Raw code stops here">
+          <span>Raw code stops here</span>
+        </li>
+        <li class="flow-step">
+          <span class="flow-name">Safe abstract description</span>
+          <span class="flow-desc">Issue type, risk, file, line, generic text. No code.</span>
+        </li>
+        <li class="flow-step flow-optional">
+          <span class="flow-name">Gemini</span>
+          <span class="flow-desc">Optional, CLI only. Explains each finding.</span>
+        </li>
+        <li class="flow-step">
+          <span class="flow-name">Report</span>
+          <span class="flow-desc">Terminal, Markdown or MR comment</span>
+        </li>
+      </ol>
+      <p class="muted">
+        Gemini only ever sees the abstract description. Raw source code is never sent to it,
+        and this demo page never contacts Gemini at all.
+      </p>
+    </section>
+
+    <section id="try" aria-labelledby="try-title">
+      <h2 id="try-title">Try it</h2>
+
+      <h3 class="sub">One-click examples</h3>
+      <ul id="examples" class="examples">
+        <li class="examples-fallback muted">
+          Loading examples… If this doesn't change, the demo script didn't load.
+          Preview with <code>npm run demo:serve</code> instead of opening <code>demo/index.html</code> directly.
+        </li>
+      </ul>
+
+      <label for="code" class="sub">Code to scan</label>
+      <p id="source-label" class="muted source-label" aria-live="polite"></p>
+      <textarea id="code" wrap="off" rows="14" spellcheck="false" autocapitalize="off"
+        autocomplete="off" autocorrect="off" placeholder="Paste code here, or pick an example above."></textarea>
+
+      <p id="diff-note" class="note" hidden>
+        This looks like a diff. The demo treats input as plain code: line numbers count lines
+        of the pasted text, and removed (“-”) lines are scanned too. For diffs, use the CLI:
+        <code>scan --diff-file changes.diff</code>.
+      </p>
+
+      <div class="actions">
+        <button id="scan" class="btn btn-primary" type="button">Scan</button>
+        <button id="clear" class="btn" type="button">Clear</button>
+      </div>
+      <p class="muted small">
+        Runs the same detection code as the CLI (<code>services/localSecurityScanner.js</code>).
+        No network requests are made while scanning.
+      </p>
+    </section>
+
+    <section id="results" class="panel" aria-live="polite" hidden></section>
+    <section id="ai-review" class="panel" hidden></section>
+
+    <section id="run" aria-labelledby="run-title">
+      <h2 id="run-title">Run it yourself</h2>
+      <p>You need <a href="https://nodejs.org/">Node.js</a> 22 or newer and Git. No GitLab account is needed for the first steps.</p>
+
+      <h3 class="sub">Quick start</h3>
+      <pre class="cmd"><code>git clone https://github.com/TomNguyen132006/secure-review.git
+cd secure-review
+npm ci
+npm test
+npm run demo</code></pre>
+      <p class="muted"><code>npm run demo</code> scans <code>examples/vulnerable.diff</code> and reports a hardcoded password, a SQL injection and weak authentication.</p>
+
+      <h3 class="sub">Scan your own changes offline</h3>
+      <pre class="cmd"><code>git diff main &gt; changes.diff
+node bin/secure-review.js scan --diff-file changes.diff</code></pre>
+
+      <h3 class="sub">Real GitLab use</h3>
+      <p>
+        Create a GitLab personal access token with the <code>read_api</code> scope
+        (or <code>api</code> if you also want <code>--comment</code>), then:
+      </p>
+      <pre class="cmd"><code>node bin/secure-review.js gitlab login
+node bin/secure-review.js scan --project my-group/my-project --mr 42
+node bin/secure-review.js scan --project my-group/my-project --mr 42 --markdown --comment</code></pre>
+      <p>
+        Set <code>GEMINI_API_KEY</code> to add AI explanations. Without it, the CLI uses its
+        built-in explanations and says so.
+      </p>
+
+      <h3 class="sub">Use it as a CI gate</h3>
+      <pre class="cmd"><code>node bin/secure-review.js scan --project my-group/my-project --mr 42 --fail-on high</code></pre>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th scope="col">Exit code</th><th scope="col">Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>0</code></td><td>Success. With <code>--fail-on</code>, no finding reached the level.</td></tr>
+            <tr><td><code>1</code></td><td>Error (missing option, not logged in, GitLab error, …).</td></tr>
+            <tr><td><code>2</code></td><td>At least one finding is at or above <code>--fail-on</code>.</td></tr>
+            <tr><td><code>130</code></td><td><code>gitlab login</code> was cancelled with Ctrl+C.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Full instructions: <a href="https://github.com/TomNguyen132006/secure-review#readme">README on GitHub</a>.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p class="muted small">SecureReview demo. Local rules are pattern-based and can miss things.</p>
+    </div>
+  </footer>
+</body>
+</html>
