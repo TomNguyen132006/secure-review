@@ -1,0 +1,34 @@
+[
+  {
+    "id": "hardcoded-api-key",
+    "title": "Hardcoded API key",
+    "fileName": "src/paymentClient.js",
+    "expected": [{ "issueType": "Hardcoded API Key", "lineNumber": 3 }],
+    "code": "const axios = require(\"axios\");\n\nconst apiKey = \"demo-not-a-real-key-1234567890\";\n\nasync function charge(amount) {\n  return axios.post(\"https://payments.example.com/charge\", { amount }, {\n    headers: { Authorization: `Bearer ${apiKey}` },\n  });\n}\n\nmodule.exports = { charge };\n",
+    "safeCode": "const axios = require(\"axios\");\n\nconst apiKey = process.env.PAYMENT_API_KEY;\n\nasync function charge(amount) {\n  return axios.post(\"https://payments.example.com/charge\", { amount }, {\n    headers: { Authorization: `Bearer ${apiKey}` },\n  });\n}\n\nmodule.exports = { charge };\n"
+  },
+  {
+    "id": "sql-injection",
+    "title": "SQL injection",
+    "fileName": "src/users.js",
+    "expected": [{ "issueType": "SQL Injection Risk", "lineNumber": 4 }],
+    "code": "const db = require(\"./db\");\n\nasync function findUser(req) {\n  const query = \"SELECT * FROM users WHERE id = \" + req.params.id;\n  const [rows] = await db.query(query);\n  return rows[0];\n}\n\nmodule.exports = { findUser };\n",
+    "safeCode": "const db = require(\"./db\");\n\nasync function findUser(req) {\n  const query = \"SELECT * FROM users WHERE id = ?\";\n  const [rows] = await db.query(query, [req.params.id]);\n  return rows[0];\n}\n\nmodule.exports = { findUser };\n"
+  },
+  {
+    "id": "missing-authorization",
+    "title": "Express /admin route without authorization",
+    "fileName": "src/routes/admin.js",
+    "expected": [{ "issueType": "Missing Authorization Check", "lineNumber": 5 }],
+    "code": "const express = require(\"express\");\nconst app = express();\nconst users = require(\"./users\");\n\napp.delete(\"/admin/users/:id\", async (req, res) => {\n  await users.remove(req.params.id);\n  res.sendStatus(204);\n});\n\nmodule.exports = app;\n",
+    "safeCode": "const express = require(\"express\");\nconst app = express();\nconst users = require(\"./users\");\nconst { requireAdmin } = require(\"./auth\");\n\napp.delete(\"/admin/users/:id\", requireAdmin, async (req, res) => {\n  await users.remove(req.params.id);\n  res.sendStatus(204);\n});\n\nmodule.exports = app;\n"
+  },
+  {
+    "id": "missing-validation",
+    "title": "Java endpoint without @Valid",
+    "fileName": "src/main/java/demo/UserController.java",
+    "expected": [{ "issueType": "Missing Validation", "lineNumber": 7 }],
+    "code": "package demo;\n\n@RestController\n@RequestMapping(\"/users\")\npublic class UserController {\n\n  @PostMapping\n  public User create(@RequestBody User user) {\n    return userService.save(user);\n  }\n}\n",
+    "safeCode": "package demo;\n\n@RestController\n@RequestMapping(\"/users\")\npublic class UserController {\n\n  @PostMapping\n  public User create(@Valid @RequestBody User user) {\n    return userService.save(user);\n  }\n}\n"
+  }
+]
