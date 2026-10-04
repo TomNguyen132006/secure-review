@@ -10,6 +10,7 @@ const {
 const {
   main,
   recordAll,
+  findingsFor,
   RECORDING_TIMEOUT_MS,
   RETRY_DELAYS_MS,
 } = require("../scripts/record-gemini-demo");
@@ -124,8 +125,9 @@ describe("Gemini timeouts, retries and key validation", () => {
       expect(result.recordings).toHaveLength(examples.length);
       expect(result.recordings.every((item) => item.findings.every((f) => f.explanation === "Recorded explanation."))).toBe(true);
 
-      // 4 findings + 1 retry.
-      expect(fetch).toHaveBeenCalledTimes(examples.length + 1);
+      // One call per finding in the real examples, plus the one retry.
+      const totalFindings = examples.reduce((sum, example) => sum + findingsFor(example).length, 0);
+      expect(fetch).toHaveBeenCalledTimes(totalFindings + 1);
       expect(sleep.mock.calls).toEqual([[2000]]);
       expect(log.mock.calls).toEqual([
         ["Retry 1/2 for hardcoded-api-key line 3 in 2s (Gemini request timed out after 30s)"],

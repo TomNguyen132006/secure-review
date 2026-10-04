@@ -113,20 +113,87 @@ describe("demo browser bundle", () => {
     }
   });
 
-  test("bundle contains no network APIs or Gemini client code", () => {
-    expect(bundle).not.toMatch(/XMLHttpRequest|WebSocket|sendBeacon|EventSource|importScripts/);
-    // No Gemini endpoint or auth header (the UI text may mention GEMINI_API_KEY).
-    expect(bundle).not.toMatch(/generativelanguage|googleapis|x-goog-api-key/);
+});
 
-    // The only "fetch(" text allowed is inside the scanner's exfiltration regex.
-    const fetchMentions = bundle.match(/.{0,2}fetch\s*\(/g) || [];
-    expect(fetchMentions.every((mention) => mention.includes("/fetch\\("))).toBe(true);
+/*
+  Static checks on what goes INTO the bundle. The bundle text itself also
+  contains the example code as data (e.g. a fetch(...) exfiltration example
+  or require("fs") in a safe version), so the text checks run on the source
+  of every non-JSON input instead. esbuild's metafile says which files those
+  are.
+*/
+describe("demo bundle inputs", () => {
+  const ALLOWED_INPUTS = [
+    "demo/src/main.js",
+    "demo/src/examples.json",
+    "demo/src/gemini-recordings.json",
+    "services/localSecurityScanner.js",
+    "services/securityAbstractionService.js",
+  ];
+
+  let inputs = [];
+  let buildError = null;
+
+  beforeAll(async () => {
+    try {
+      const esbuild = require("esbuild");
+      const { BUNDLE_OPTIONS } = require("../scripts/build-demo");
+      const result = await esbuild.build({
+        ...BUNDLE_OPTIONS,
+        write: false,
+        metafile: true,
+        absWorkingDir: path.join(__dirname, ".."),
+      });
+
+      inputs = Object.keys(result.metafile.inputs).map((file) => file.replace(/\\/g, "/"));
+    } catch (error) {
+      buildError = error;
+    }
+  }, 30000);
+
+  const sourceInputs = () =>
+    inputs
+      .filter((file) => !file.endsWith(".json"))
+      .map((file) => [file, fs.readFileSync(path.join(__dirname, "..", file), "utf8")]);
+
+  test("the bundle builds for the browser", () => {
+    expect(buildError).toBeNull();
   });
 
-  test("bundle does not require Node-only modules", () => {
-    // Node globals (process, require, Buffer) are absent from the sandbox above,
-    // so any use of them while loading or scanning would already have failed.
-    expect(bundle).not.toMatch(/\brequire\(\s*["'](fs|path|os|child_process|http|https|crypto)["']/);
+  test("bundle inputs are only the allowed files", () => {
+    expect([...inputs].sort()).toEqual([...ALLOWED_INPUTS].sort());
+  });
+
+  test("no input source uses network APIs or Gemini client code", () => {
+    expect(sourceInputs().length).toBeGreaterThan(0);
+
+    for (const [file, source] of sourceInputs()) {
+      const networkApis =
+        source.match(/XMLHttpRequest|WebSocket|sendBeacon|EventSource|importScripts/g) || [];
+      // No Gemini endpoint or auth header (UI text may mention GEMINI_API_KEY).
+      const geminiClient = source.match(/generativelanguage|googleapis|x-goog-api-key/g) || [];
+      // The only "fetch(" text allowed is inside the scanner's exfiltration regex.
+      const fetchCalls = (source.match(/.{0,2}fetch\s*\(/g) || []).filter(
+        (mention) => !mention.includes("/fetch\\(")
+      );
+
+      expect({ file, networkApis, geminiClient, fetchCalls }).toEqual({
+        file,
+        networkApis: [],
+        geminiClient: [],
+        fetchCalls: [],
+      });
+    }
+  });
+
+  test("no input source requires Node-only modules", () => {
+    expect(sourceInputs().length).toBeGreaterThan(0);
+
+    for (const [file, source] of sourceInputs()) {
+      const nodeRequires =
+        source.match(/\brequire\(\s*["'](fs|path|os|child_process|http|https|crypto)["']\s*\)/g) || [];
+      expect({ file, nodeRequires }).toEqual({ file, nodeRequires: [] });
+    }
   });
 });
 

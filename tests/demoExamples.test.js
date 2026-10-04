@@ -7,10 +7,20 @@ const examples = require("../demo/src/examples.json");
   version gives zero findings.
 */
 describe("demo built-in examples", () => {
-  test("there are 4 examples with unique ids", () => {
-    expect(examples).toHaveLength(4);
+  test("there are at least 4 examples with unique ids", () => {
+    expect(examples.length).toBeGreaterThanOrEqual(4);
     expect(new Set(examples.map((example) => example.id)).size).toBe(examples.length);
   });
+
+  test.each(examples.map((example) => [example.id, example]))(
+    "%s: has a non-empty expected list and a safe version",
+    (_id, example) => {
+      expect(Array.isArray(example.expected)).toBe(true);
+      expect(example.expected.length).toBeGreaterThan(0);
+      expect(typeof example.safeCode).toBe("string");
+      expect(example.safeCode.trim()).not.toBe("");
+    }
+  );
 
   test.each(examples.map((example) => [example.id, example]))(
     "%s: vulnerable version triggers exactly its rule",
