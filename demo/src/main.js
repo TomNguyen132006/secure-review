@@ -147,7 +147,23 @@ function initUi() {
   // Replace the "Loading examples…" fallback from index.html.
   examplesList.replaceChildren();
 
-  for (const example of examples) {
+  // The first 4 examples are always visible; the rest sit in a native
+  // <details> so the list stays short on phones. It starts open on wider
+  // screens (same breakpoint as the 2-column grid in styles.css).
+  const VISIBLE_EXAMPLES = 4;
+  let moreList = null;
+
+  if (examples.length > VISIBLE_EXAMPLES) {
+    const more = el("details", "more-examples");
+    more.appendChild(el("summary", null, `More examples (${examples.length - VISIBLE_EXAMPLES})`));
+    moreList = el("ul", "examples");
+    more.appendChild(moreList);
+    more.open =
+      typeof window.matchMedia === "function" && window.matchMedia("(min-width: 700px)").matches;
+    examplesList.after(more);
+  }
+
+  for (const [index, example] of examples.entries()) {
     const row = el("li", "example");
     row.appendChild(el("span", "example-title", example.title));
 
@@ -164,7 +180,7 @@ function initUi() {
 
     buttons.append(vulnerable, safe);
     row.appendChild(buttons);
-    examplesList.appendChild(row);
+    (index < VISIBLE_EXAMPLES || !moreList ? examplesList : moreList).appendChild(row);
   }
 
   function renderFindings(findings, lines, fileName) {

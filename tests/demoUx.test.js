@@ -127,7 +127,9 @@ describe("demo: empty example list fallback", () => {
     const list = document.getElementById("examples");
 
     expect(list.textContent).not.toContain("Loading examples");
-    expect(list.querySelectorAll("li.example")).toHaveLength(examples.length);
-    expect(list.children).toHaveLength(examples.length);
+    // The first 4 are in #examples; the rest are in the "More examples" <details>.
+    expect(list.children).toHaveLength(Math.min(4, examples.length));
+    expect(document.querySelector(".more-examples > ul").children).toHaveLength(examples.length - 4);
+    expect(document.querySelectorAll("li.example")).toHaveLength(examples.length);
   });
 });

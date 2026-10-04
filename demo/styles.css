@@ -288,6 +288,23 @@ section {
   min-width: 0;
 }
 
+/* Extra examples in a native <details>; the summary is the tap target. */
+.more-examples {
+  margin-top: 0.6rem;
+}
+
+.more-examples > summary {
+  min-height: 44px;
+  padding: 0.6rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.more-examples[open] > summary {
+  margin-bottom: 0.6rem;
+}
+
 /* Shown only if app.js fails to load (main.js replaces it). */
 .examples-fallback {
   grid-column: 1 / -1;
