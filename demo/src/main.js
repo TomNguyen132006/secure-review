@@ -89,6 +89,15 @@ function severityClass(riskLevel) {
   return SEVERITY_ORDER[level] === undefined ? "sev sev-unknown" : `sev sev-${level}`;
 }
 
+// Smooth scrolling unless the visitor asked for reduced motion.
+function scrollIntoViewGently(element) {
+  const reduceMotion =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  element.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+}
+
 function scannerWorks() {
   try {
     return scanCode('const password = "selftest-value";').length === 1;
@@ -132,9 +141,11 @@ function initUi() {
   function loadExample(example, variant) {
     textarea.value = variant === "safe" ? example.safeCode : example.code;
     updateSourceLabel();
-    runScan();
-    results.scrollIntoView({ behavior: "smooth", block: "start" });
+    runScan(); // scrolls to the results
   }
+
+  // Replace the "Loading examples…" fallback from index.html.
+  examplesList.replaceChildren();
 
   for (const example of examples) {
     const row = el("li", "example");
@@ -317,6 +328,10 @@ function initUi() {
         el("p", "error", "The scanner could not run in this browser. See the note at the top of the page.")
       );
       ai.replaceChildren();
+      // The results panel may still be hidden on a first scan.
+      results.hidden = false;
+      ai.hidden = true;
+      scrollIntoViewGently(results);
       return;
     }
 
@@ -327,6 +342,7 @@ function initUi() {
     renderAi(findings, match);
     results.hidden = false;
     ai.hidden = false;
+    scrollIntoViewGently(results);
   }
 
   textarea.addEventListener("input", updateSourceLabel);

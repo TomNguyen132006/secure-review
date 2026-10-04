@@ -288,6 +288,12 @@ section {
   min-width: 0;
 }
 
+/* Shown only if app.js fails to load (main.js replaces it). */
+.examples-fallback {
+  grid-column: 1 / -1;
+  padding: 0.7rem 0;
+}
+
 .example-title {
   font-weight: 600;
 }
