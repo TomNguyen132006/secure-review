@@ -95,8 +95,22 @@ describe("demo browser bundle", () => {
     expect(demo.looksLikeDiff('const total = a - b;\n-- SQL comment\nconst x = "+++";')).toBe(false);
   });
 
-  test("uses the exact pre-recorded note", () => {
-    expect(demo.PRE_RECORDED_NOTE).toBe("Pre-recorded result. The CLI calls Gemini live.");
+  test("pre-recorded note names the model it is given", () => {
+    expect(demo.preRecordedNote("gemini-3.5-flash-lite")).toBe(
+      "Pre-recorded result from gemini-3.5-flash-lite. The CLI calls Gemini live."
+    );
+  });
+
+  test("the note uses the model from the recordings file, not a hardcoded one", () => {
+    const recordings = require("../demo/src/gemini-recordings.json").recordings;
+    const source = require("fs").readFileSync(path.join(DEMO, "src", "main.js"), "utf8");
+
+    expect(source).toContain("preRecordedNote(recording.model)");
+    expect(source).not.toMatch(/Pre-recorded result from gemini-/);
+
+    for (const recording of recordings) {
+      expect(demo.findRecording(recording.exampleId).model).toBe(recording.model);
+    }
   });
 
   test("bundle contains no network APIs or Gemini client code", () => {

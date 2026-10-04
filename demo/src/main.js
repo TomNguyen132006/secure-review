@@ -15,7 +15,10 @@ import { createAbstractDescription } from "../../services/securityAbstractionSer
 import examples from "./examples.json";
 import geminiRecordings from "./gemini-recordings.json";
 
-export const PRE_RECORDED_NOTE = "Pre-recorded result. The CLI calls Gemini live.";
+// The model comes from the recordings file; it can differ from the CLI default.
+export function preRecordedNote(model) {
+  return `Pre-recorded result from ${model}. The CLI calls Gemini live.`;
+}
 
 function normalizeNewlines(text) {
   return String(text).replace(/\r\n?/g, "\n");
@@ -58,7 +61,7 @@ if (typeof globalThis !== "undefined") {
     identifyExample,
     findRecording,
     examples,
-    PRE_RECORDED_NOTE,
+    preRecordedNote,
   };
 }
 
@@ -244,14 +247,8 @@ function initUi() {
     const recording = match && match.variant === "vulnerable" ? findRecording(match.example.id) : null;
 
     if (recording) {
-      ai.appendChild(el("p", "note", PRE_RECORDED_NOTE));
-      ai.appendChild(
-        el(
-          "p",
-          "muted",
-          `Recorded with ${recording.model} on ${String(recording.recordedAt).slice(0, 10)}.`
-        )
-      );
+      ai.appendChild(el("p", "note", preRecordedNote(recording.model)));
+      ai.appendChild(el("p", "muted", `Recorded on ${String(recording.recordedAt).slice(0, 10)}.`));
 
       for (const item of recording.findings) {
         const card = el("div", "ai-card");
