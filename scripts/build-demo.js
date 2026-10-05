@@ -9,6 +9,7 @@
     node scripts/build-demo.js            -> _site/
     node scripts/build-demo.js out/dir    -> out/dir/
 */
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const esbuild = require("esbuild");
@@ -48,10 +49,29 @@ async function buildDemo(outDir = path.join(ROOT, "_site")) {
     fs.copyFileSync(path.join(DEMO, file), path.join(outDir, file));
   }
 
+  versionScriptTag(outDir);
+
   // Tell GitHub Pages not to run Jekyll on the output.
   fs.writeFileSync(path.join(outDir, ".nojekyll"), "");
 
   return outDir;
+}
+
+// GitHub Pages caches files for 10 minutes, so give app.js a URL that changes
+// whenever its content does: app.js -> app.js?v=<first 12 hex of its sha256>.
+function versionScriptTag(outDir) {
+  const indexPath = path.join(outDir, "index.html");
+  const tag = '<script src="app.js" defer></script>';
+  const html = fs.readFileSync(indexPath, "utf8");
+
+  if (!html.includes(tag)) {
+    throw new Error(`demo/index.html must contain ${tag}`);
+  }
+
+  const bundle = fs.readFileSync(path.join(outDir, "app.js"));
+  const hash = crypto.createHash("sha256").update(bundle).digest("hex").slice(0, 12);
+
+  fs.writeFileSync(indexPath, html.replace(tag, `<script src="app.js?v=${hash}" defer></script>`));
 }
 
 module.exports = { bundleDemo, buildDemo, BUNDLE_OPTIONS };
