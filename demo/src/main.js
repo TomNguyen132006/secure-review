@@ -148,8 +148,7 @@ function initUi() {
   examplesList.replaceChildren();
 
   // The first 4 examples are always visible; the rest sit in a native
-  // <details> so the list stays short on phones. It starts open on wider
-  // screens (same breakpoint as the 2-column grid in styles.css).
+  // <details> that starts closed on every screen size and opens on click.
   const VISIBLE_EXAMPLES = 4;
   let moreList = null;
 
@@ -158,8 +157,6 @@ function initUi() {
     more.appendChild(el("summary", null, `More examples (${examples.length - VISIBLE_EXAMPLES})`));
     moreList = el("ul", "examples");
     more.appendChild(moreList);
-    more.open =
-      typeof window.matchMedia === "function" && window.matchMedia("(min-width: 700px)").matches;
     examplesList.after(more);
   }
 

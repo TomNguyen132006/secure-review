@@ -33,7 +33,7 @@ afterAll(() => {
 const normalizeSpace = (text) => text.replace(/\s+/g, " ").trim();
 
 // Load the page; optionally run app.js. Returns the window plus recorded scrolls.
-async function openPage({ reducedMotion = false, runScript = true } = {}) {
+async function openPage({ reducedMotion = false, runScript = true, wideScreen = false } = {}) {
   const dom = new JSDOM(html, { runScripts: "outside-only", url: "http://127.0.0.1:8080/" });
   const { window } = dom;
   const scrolls = [];
@@ -42,7 +42,12 @@ async function openPage({ reducedMotion = false, runScript = true } = {}) {
     scrolls.push({ id: this.id, options });
   };
   window.matchMedia = (query) => ({
-    matches: query === "(prefers-reduced-motion: reduce)" ? reducedMotion : false,
+    matches:
+      query === "(prefers-reduced-motion: reduce)"
+        ? reducedMotion
+        : /min-width/.test(query)
+          ? wideScreen
+          : false,
     media: query,
     addEventListener() {},
     removeEventListener() {},
@@ -131,5 +136,26 @@ describe("demo: empty example list fallback", () => {
     expect(list.children).toHaveLength(Math.min(4, examples.length));
     expect(document.querySelector(".more-examples > ul").children).toHaveLength(examples.length - 4);
     expect(document.querySelectorAll("li.example")).toHaveLength(examples.length);
+  });
+});
+
+describe("demo: More examples starts closed", () => {
+  test.each([
+    ["a phone", false],
+    ["a wide screen", true],
+  ])("on %s, More examples is closed and its examples are hidden until clicked", async (_label, wideScreen) => {
+    const { document } = await openPage({ wideScreen });
+    const more = document.querySelector("details.more-examples");
+    const summary = more.querySelector(":scope > summary");
+
+    expect(more.open).toBe(false);
+    expect(more.hasAttribute("open")).toBe(false);
+    expect(summary.textContent).toBe(`More examples (${examples.length - 4})`);
+
+    summary.click();
+    expect(more.open).toBe(true);
+
+    summary.click();
+    expect(more.open).toBe(false);
   });
 });
