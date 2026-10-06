@@ -95,9 +95,16 @@ describe("demo browser bundle", () => {
     expect(demo.looksLikeDiff('const total = a - b;\n-- SQL comment\nconst x = "+++";')).toBe(false);
   });
 
-  test("pre-recorded note names the model it is given", () => {
-    expect(demo.preRecordedNote("gemini-3.5-flash-lite")).toBe(
-      "Pre-recorded result from gemini-3.5-flash-lite. The CLI calls Gemini live."
+  test("pre-recorded note names the recorded model, the date and the CLI model", () => {
+    const { DEFAULT_MODEL } = require("../services/geminiAnalysisService");
+
+    expect(demo.CLI_MODEL).toBe(DEFAULT_MODEL);
+    expect(demo.preRecordedNote("gemini-3.5-flash-lite", "2026-10-04T02:51:19.656Z")).toBe(
+      "Pre-recorded result from gemini-3.5-flash-lite, recorded on 2026-10-04. " +
+        `The CLI calls Gemini live and uses ${DEFAULT_MODEL} by default.`
+    );
+    expect(demo.preRecordedNote(DEFAULT_MODEL, "2026-10-05T00:00:00.000Z")).toBe(
+      `Pre-recorded result from ${DEFAULT_MODEL}, recorded on 2026-10-05. The CLI calls it live.`
     );
   });
 
@@ -105,14 +112,25 @@ describe("demo browser bundle", () => {
     const recordings = require("../demo/src/gemini-recordings.json").recordings;
     const source = require("fs").readFileSync(path.join(DEMO, "src", "main.js"), "utf8");
 
-    expect(source).toContain("preRecordedNote(recording.model)");
+    expect(source).toContain("preRecordedNote(recording.model, recording.recordedAt)");
     expect(source).not.toMatch(/Pre-recorded result from gemini-/);
+    expect(source).not.toMatch(/["'`]gemini-\d/);
 
     for (const recording of recordings) {
       expect(demo.findRecording(recording.exampleId).model).toBe(recording.model);
     }
   });
 
+  test("demo source never assigns HTML strings to the DOM", () => {
+    for (const file of ["main.js", "markdown.js"]) {
+      const source = fs.readFileSync(path.join(DEMO, "src", file), "utf8");
+
+      expect({ file, html: source.match(/innerHTML|outerHTML|insertAdjacentHTML|document\.write/g) }).toEqual({
+        file,
+        html: null,
+      });
+    }
+  });
 });
 
 /*
@@ -125,10 +143,14 @@ describe("demo browser bundle", () => {
 describe("demo bundle inputs", () => {
   const ALLOWED_INPUTS = [
     "demo/src/main.js",
+    "demo/src/markdown.js",
     "demo/src/examples.json",
     "demo/src/gemini-recordings.json",
     "services/localSecurityScanner.js",
     "services/securityAbstractionService.js",
+    // Markdown rendering + sanitizing for the recorded Gemini text.
+    "node_modules/marked/lib/marked.esm.js",
+    "node_modules/dompurify/dist/purify.es.mjs",
   ];
 
   let inputs = [];

@@ -14,10 +14,25 @@ import { scanSecurityPatterns } from "../../services/localSecurityScanner.js";
 import { createAbstractDescription } from "../../services/securityAbstractionService.js";
 import examples from "./examples.json";
 import geminiRecordings from "./gemini-recordings.json";
+import { renderMarkdown } from "./markdown.js";
 
-// The model comes from the recordings file; it can differ from the CLI default.
-export function preRecordedNote(model) {
-  return `Pre-recorded result from ${model}. The CLI calls Gemini live.`;
+// The CLI's default model (services/geminiAnalysisService.js DEFAULT_MODEL),
+// injected at build time by scripts/build-demo.js.
+export const CLI_MODEL = __CLI_GEMINI_MODEL__;
+
+// The recorded model comes from the recordings file and can differ from the
+// CLI default; the note names both so it never misstates where text came from.
+export function preRecordedNote(recordedModel, recordedAt) {
+  const date = String(recordedAt).slice(0, 10);
+
+  if (recordedModel === CLI_MODEL) {
+    return `Pre-recorded result from ${recordedModel}, recorded on ${date}. The CLI calls it live.`;
+  }
+
+  return (
+    `Pre-recorded result from ${recordedModel}, recorded on ${date}. ` +
+    `The CLI calls Gemini live and uses ${CLI_MODEL} by default.`
+  );
 }
 
 function normalizeNewlines(text) {
@@ -62,6 +77,8 @@ if (typeof globalThis !== "undefined") {
     findRecording,
     examples,
     preRecordedNote,
+    renderMarkdown,
+    CLI_MODEL,
   };
 }
 
@@ -271,8 +288,7 @@ function initUi() {
     const recording = match && match.variant === "vulnerable" ? findRecording(match.example.id) : null;
 
     if (recording) {
-      ai.appendChild(el("p", "note", preRecordedNote(recording.model)));
-      ai.appendChild(el("p", "muted", `Recorded on ${String(recording.recordedAt).slice(0, 10)}.`));
+      ai.appendChild(el("p", "note", preRecordedNote(recording.model, recording.recordedAt)));
 
       for (const item of recording.findings) {
         const card = el("div", "ai-card");
@@ -284,7 +300,9 @@ function initUi() {
         card.appendChild(details);
 
         card.appendChild(el("p", "label", "Gemini's explanation"));
-        card.appendChild(el("p", "ai-text", item.explanation));
+        const text = el("div", "ai-text");
+        text.appendChild(renderMarkdown(item.explanation, window));
+        card.appendChild(text);
         ai.appendChild(card);
       }
 
@@ -296,7 +314,7 @@ function initUi() {
         el(
           "p",
           "muted",
-          "No pre-recorded Gemini result for this example yet. The CLI calls Gemini live when GEMINI_API_KEY is set."
+          `No pre-recorded Gemini result for this example yet. The CLI calls Gemini (${CLI_MODEL} by default) live when GEMINI_API_KEY is set.`
         )
       );
     } else {

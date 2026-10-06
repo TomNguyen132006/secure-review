@@ -148,6 +148,15 @@ section {
   color: var(--muted);
 }
 
+.why {
+  max-width: 62ch;
+  margin: 0.9rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  border-radius: 0 8px 8px 0;
+}
+
 .site-footer {
   border-top: 1px solid var(--border);
   padding: 1.25rem 0 2rem;
@@ -545,9 +554,75 @@ textarea {
   border-radius: var(--radius);
   padding: 0.85rem;
   margin-top: 0.8rem;
+  min-width: 0;
 }
 
+/* Gemini explanation rendered from Markdown (demo/src/markdown.js). */
 .ai-text {
+  min-width: 0;
+}
+
+.ai-text > :last-child {
+  margin-bottom: 0;
+}
+
+.ai-text h4,
+.ai-text h5,
+.ai-text h6 {
+  margin: 1.1em 0 0.4em;
+  font-size: 1rem;
+}
+
+.ai-text h5,
+.ai-text h6 {
+  font-size: 0.95rem;
+}
+
+.ai-text ul,
+.ai-text ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.4em;
+}
+
+.ai-text li {
+  margin: 0.25em 0;
+}
+
+.ai-text li > p {
+  margin: 0 0 0.4em;
+}
+
+.ai-text hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 1.2em 0;
+}
+
+.ai-text blockquote {
+  margin: 0 0 0.9em;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
+/* Code blocks keep their layout and scroll sideways instead of widening the page. */
+.ai-text pre {
+  margin: 0 0 0.9em;
+  padding: 0.7rem 0.8rem;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: pre;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.ai-text pre code {
+  font-size: 0.85rem;
+}
+
+.ai-text .plain-text {
   white-space: pre-wrap;
 }
 

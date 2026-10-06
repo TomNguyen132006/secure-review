@@ -13,6 +13,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const esbuild = require("esbuild");
+const { DEFAULT_MODEL } = require("../services/geminiAnalysisService");
 
 const ROOT = path.join(__dirname, "..");
 const DEMO = path.join(ROOT, "demo");
@@ -30,6 +31,8 @@ const BUNDLE_OPTIONS = {
   charset: "utf8",
   legalComments: "none",
   logLevel: "silent",
+  // The demo names the model the CLI really uses, from the CLI's own code.
+  define: { __CLI_GEMINI_MODEL__: JSON.stringify(DEFAULT_MODEL) },
 };
 
 // Returns the bundled JavaScript as a string (used by tests).
